@@ -1,11 +1,10 @@
 import wordData from '../data/words.json'
+import englishWords from 'an-array-of-english-words'
 
 export const ALL_WORDS = wordData.words
 export const CROSSCLUE_GRIDS = wordData.crossclueGrids
-export const WORD_SET = new Set([
-  ...ALL_WORDS.map(({ word }) => word),
-  ...ALL_WORDS.flatMap(({ shrinkChain }) => shrinkChain),
-])
+export const VALID_WORDS = englishWords.filter((word) => /^[a-z]{3,}$/.test(word))
+export const WORD_SET = new Set(VALID_WORDS)
 const WORD_MAP = Object.fromEntries(ALL_WORDS.map((entry) => [entry.word, entry]))
 
 export const isValidWord = (word = '') => WORD_SET.has(word.toLowerCase())
@@ -31,14 +30,20 @@ function canBuildWord(candidate, source) {
 }
 
 export const getSubWords = (source, centerLetter = '') =>
-  ALL_WORDS.filter(({ word }) =>
+  VALID_WORDS.filter((word) =>
     word.length >= 3 &&
     word.length <= source.length &&
     (!centerLetter || word.includes(centerLetter)) &&
     canBuildWord(word, source))
 
+const getCuratedSubWords = (source) =>
+  ALL_WORDS.filter(({ word }) =>
+    word.length >= 3 &&
+    word.length <= source.length &&
+    canBuildWord(word, source))
+
 export const getLetterLockSets = () =>
-  ALL_WORDS.filter((word) => word.length === 7 && getSubWords(word.word).length >= 8)
+  ALL_WORDS.filter((word) => word.length === 7 && getCuratedSubWords(word.word).length >= 8)
 
 export function getDifficultyForLevel(level) {
   const cycle = Math.floor((level - 1) / 5) % 4

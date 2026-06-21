@@ -1,18 +1,16 @@
 import { useMemo, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
-import { getShrinkableWords, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
+import { getShrinkableWords, getXPForLevel, isValidWord, shuffle, VALID_WORDS } from '../utils/wordUtils'
 
 function WordShrink({ level, onComplete, showToast }) {
   const startLength = level <= 5 ? 6 : level <= 10 ? 7 : 8
   const start = useMemo(() => shuffle(getShrinkableWords(startLength))[0], [startLength])
-  const chain = start?.shrinkChain || []
-  const [step, setStep] = useState(0)
   const [removedIndex, setRemovedIndex] = useState(null)
   const [input, setInput] = useState('')
   const [score, setScore] = useState(0)
-  const history = [start.word, ...chain.slice(0, step)]
+  const [history, setHistory] = useState([start.word])
   const currentWord = history.at(-1)
-  const target = chain[step]
+  const stepsLeft = currentWord.length - 3
   const remaining = removedIndex === null
     ? ''
     : currentWord.split('').filter((_, index) => index !== removedIndex).join('')
@@ -29,18 +27,21 @@ function WordShrink({ level, onComplete, showToast }) {
     if ([...answer].sort().join('') !== [...remaining].sort().join('')) {
       return showToast('Use every remaining letter exactly once.', 'error')
     }
-    if (!isValidWord(answer) || answer !== target) return showToast(`'${answer}' does not continue this shrink.`, 'error')
+    if (!isValidWord(answer)) return showToast(`'${answer}' is not a valid word.`, 'error')
     const nextScore = score + answer.length * 25
-    const nextStep = step + 1
     setScore(nextScore)
-    setStep(nextStep)
+    setHistory((words) => [...words, answer])
     setRemovedIndex(null)
     setInput('')
     showToast('Perfect shrink!', 'success')
-    if (nextStep >= chain.length) onComplete(nextScore, getXPForLevel(level), level + 1)
+    if (answer.length === 3) onComplete(nextScore, getXPForLevel(level), level + 1)
   }
 
   function hint() {
+    const signature = [...remaining].sort().join('')
+    const target = VALID_WORDS.find((word) =>
+      word.length === remaining.length && [...word].sort().join('') === signature)
+    if (!target) return showToast('Try removing a different letter.', 'info')
     setInput(target)
     setScore((value) => Math.max(0, value - 10))
   }
@@ -48,7 +49,7 @@ function WordShrink({ level, onComplete, showToast }) {
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
-      <div className="status-row"><span className="neutral-status">Steps left</span><strong>{chain.length - step}</strong></div>
+      <div className="status-row"><span className="neutral-status">Steps left</span><strong>{stepsLeft}</strong></div>
       <section className="puzzle-card shrink-card">
         <div>
           <p className="puzzle-label">Tap the letter to remove</p>

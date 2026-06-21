@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getLetterLockSets, getSubWords, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
-function bestCenterLetter(source) {
+function bestCenterLetter(source, candidates) {
   const unique = [...new Set(source)]
   return unique.sort((a, b) =>
-    getSubWords(source, b).length - getSubWords(source, a).length)[0]
+    candidates.filter((word) => word.includes(b)).length -
+    candidates.filter((word) => word.includes(a)).length)[0]
 }
 
 function LetterLock({ level, onComplete, showToast }) {
   const [set] = useState(() => shuffle(getLetterLockSets())[0])
   const source = set?.word || 'present'
-  const centerLetter = useMemo(() => bestCenterLetter(source), [source])
+  const allValidWords = useMemo(() => getSubWords(source), [source])
+  const centerLetter = useMemo(() => bestCenterLetter(source, allValidWords), [allValidWords, source])
   const centerIndex = source.indexOf(centerLetter)
   const ringLetters = [...source.slice(0, centerIndex), ...source.slice(centerIndex + 1)]
-  const validWords = useMemo(() => getSubWords(source, centerLetter), [centerLetter, source])
+  const validWords = useMemo(
+    () => allValidWords.filter((word) => word.includes(centerLetter)),
+    [allValidWords, centerLetter],
+  )
   const target = Math.min(8, Math.max(4, Math.floor(validWords.length * 0.45)))
   const timeLimit = Math.max(60, 120 - level * 2)
   const [answer, setAnswer] = useState('')
@@ -71,7 +76,7 @@ function LetterLock({ level, onComplete, showToast }) {
   function submit() {
     if (answer.length < 3) return showToast('Words need at least three letters.', 'error')
     if (!answer.includes(centerLetter)) return showToast(`Every word must include ${centerLetter.toUpperCase()}.`, 'error')
-    if (!isValidWord(answer) || !validWords.some(({ word }) => word === answer)) return showToast(`'${answer}' is not in this lock.`, 'error')
+    if (!isValidWord(answer) || !validWords.includes(answer)) return showToast(`'${answer}' is not in this lock.`, 'error')
     if (found.includes(answer)) return showToast(`Already found '${answer}'.`, 'error')
     const pangram = answer.length === source.length && [...answer].sort().join('') === [...source].sort().join('')
     const nextScore = score + answer.length * 10 + (pangram ? 50 : 0)
