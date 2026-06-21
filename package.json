@@ -1,7 +1,8 @@
 {
   "name": "wordmaster",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Five mobile-first browser word games with local progress.",
   "type": "module",
   "scripts": {
     "dev": "vite",
