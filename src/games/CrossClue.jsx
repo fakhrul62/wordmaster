@@ -11,8 +11,11 @@ function CrossClue({ level, onComplete, showToast }) {
   const grid = useMemo(() => getGridForLevel(level), [level])
   const [answers, setAnswers] = useState({})
   const [activeIndex, setActiveIndex] = useState(0)
-  const [cursor, setCursor] = useState(0)
+  const [, setCursor] = useState(0)
   const hiddenInput = useRef(null)
+  const answersRef = useRef({})
+  const activeIndexRef = useRef(0)
+  const cursorRef = useRef(0)
   const active = grid.entries[activeIndex]
   const cellSize = Math.max(36, Math.floor((Math.min(window.innerWidth, 480) - 32) / grid.gridSize))
 
@@ -33,6 +36,8 @@ function CrossClue({ level, onComplete, showToast }) {
   }, [grid])
 
   function selectEntry(entryIndex, nextCursor = 0) {
+    activeIndexRef.current = entryIndex
+    cursorRef.current = nextCursor
     setActiveIndex(entryIndex)
     setCursor(nextCursor)
     window.setTimeout(() => hiddenInput.current?.focus(), 0)
@@ -40,21 +45,36 @@ function CrossClue({ level, onComplete, showToast }) {
 
   const typeLetter = useCallback((letter) => {
     if (!/^[a-z]$/i.test(letter)) return
-    const currentAnswer = (answers[activeIndex] || '').padEnd(active.word.length, ' ')
-    const nextAnswer = `${currentAnswer.slice(0, cursor)}${letter.toLowerCase()}${currentAnswer.slice(cursor + 1)}`.trimEnd()
-    const nextAnswers = { ...answers, [activeIndex]: nextAnswer }
+    const entryIndex = activeIndexRef.current
+    const position = cursorRef.current
+    const entry = grid.entries[entryIndex]
+    const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
+    const nextAnswer = `${currentAnswer.slice(0, position)}${letter.toLowerCase()}${currentAnswer.slice(position + 1)}`.trimEnd()
+    const nextAnswers = { ...answersRef.current, [entryIndex]: nextAnswer }
+    const nextCursor = Math.min(entry.word.length - 1, position + 1)
+    answersRef.current = nextAnswers
+    cursorRef.current = nextCursor
     setAnswers(nextAnswers)
-    setCursor(Math.min(active.word.length - 1, cursor + 1))
+    setCursor(nextCursor)
     const complete = grid.entries.every((entry, index) => nextAnswers[index] === entry.word)
     if (complete) onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
-  }, [active.word.length, activeIndex, answers, cursor, grid.entries, level, onComplete])
+  }, [grid.entries, level, onComplete])
 
   const erase = useCallback(() => {
-    const currentAnswer = (answers[activeIndex] || '').padEnd(active.word.length, ' ')
-    const target = currentAnswer[cursor] ? cursor : Math.max(0, cursor - 1)
-    setAnswers({ ...answers, [activeIndex]: `${currentAnswer.slice(0, target)} ${currentAnswer.slice(target + 1)}`.trimEnd() })
+    const entryIndex = activeIndexRef.current
+    const entry = grid.entries[entryIndex]
+    const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
+    const position = cursorRef.current
+    const target = currentAnswer[position] ? position : Math.max(0, position - 1)
+    const nextAnswers = {
+      ...answersRef.current,
+      [entryIndex]: `${currentAnswer.slice(0, target)} ${currentAnswer.slice(target + 1)}`.trimEnd(),
+    }
+    answersRef.current = nextAnswers
+    cursorRef.current = target
+    setAnswers(nextAnswers)
     setCursor(target)
-  }, [active.word.length, activeIndex, answers, cursor])
+  }, [grid.entries])
 
   useEffect(() => {
     const keyboard = (event) => {
