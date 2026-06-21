@@ -1,0 +1,10 @@
+:root {
+  --bg: #090916; --bg2: #121226; --bg3: #1c1c38; --surface: rgba(24,24,50,.82);
+  --accent: #8268ff; --accent2: #ff5f8f; --accent3: #5cf8d0;
+  --text: #f5f3ff; --text2: #9b99ba; --success: #5cf8a0; --error: #ff6685; --gold: #ffd45c;
+  --radius: 14px; --tile-size: 44px; --tile-font: 1.1rem; --tile-gap: 6px;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+  --game-max-width: 520px; --header-height: 64px;
+}
+@media (min-width:600px) { :root { --tile-size:52px; --tile-font:1.2rem; --tile-gap:8px; } }
+@media (min-width:960px) { :root { --tile-size:56px; --tile-font:1.3rem; --tile-gap:10px; } }
