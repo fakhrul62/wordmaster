@@ -38,7 +38,7 @@ export const getSubWords = (source, centerLetter = '') =>
     canBuildWord(word, source))
 
 export const getLetterLockSets = () =>
-  ALL_WORDS.filter((word) => word.length === 6 && getSubWords(word.word).length >= 8)
+  ALL_WORDS.filter((word) => word.length === 7 && getSubWords(word.word).length >= 8)
 
 export function getDifficultyForLevel(level) {
   const cycle = Math.floor((level - 1) / 5) % 4

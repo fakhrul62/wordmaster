@@ -4,6 +4,7 @@ import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
 import CrossClue from '../games/CrossClue'
 import WordShrink from '../games/WordShrink'
+import LetterLock from '../games/LetterLock'
 
 const GAME_NAMES = {
   wordchain: 'WordChain',
@@ -18,6 +19,7 @@ const GAME_COMPONENTS = {
   anagramvault: AnagramVault,
   crossclue: CrossClue,
   wordshrink: WordShrink,
+  letterlock: LetterLock,
 }
 
 function spawnConfetti() {
