@@ -2,7 +2,10 @@ import wordData from '../data/words.json'
 
 export const ALL_WORDS = wordData.words
 export const CROSSCLUE_GRIDS = wordData.crossclueGrids
-export const WORD_SET = new Set(ALL_WORDS.map(({ word }) => word))
+export const WORD_SET = new Set([
+  ...ALL_WORDS.map(({ word }) => word),
+  ...ALL_WORDS.flatMap(({ shrinkChain }) => shrinkChain),
+])
 const WORD_MAP = Object.fromEntries(ALL_WORDS.map((entry) => [entry.word, entry]))
 
 export const isValidWord = (word = '') => WORD_SET.has(word.toLowerCase())
@@ -61,4 +64,3 @@ export function getRank(xp) {
 
 export const normalizeUsername = (username) =>
   username.trim().toLowerCase().replace(/\s+/g, '_')
-

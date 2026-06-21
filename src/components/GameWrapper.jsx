@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
 import CrossClue from '../games/CrossClue'
+import WordShrink from '../games/WordShrink'
 
 const GAME_NAMES = {
   wordchain: 'WordChain',
@@ -12,7 +13,12 @@ const GAME_NAMES = {
   letterlock: 'LetterLock',
 }
 
-const GAME_COMPONENTS = { wordchain: Wordchain, anagramvault: AnagramVault, crossclue: CrossClue }
+const GAME_COMPONENTS = {
+  wordchain: Wordchain,
+  anagramvault: AnagramVault,
+  crossclue: CrossClue,
+  wordshrink: WordShrink,
+}
 
 function spawnConfetti() {
   const colors = ['#8268ff', '#ff5f8f', '#5cf8d0', '#ffd45c', '#5cf8a0']

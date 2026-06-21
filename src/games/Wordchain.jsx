@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
 import { getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
 function Wordchain({ level, onComplete, showToast }) {
   const maxTime = Math.max(6, 15 - Math.floor(level / 3))
   const targetChain = 5 + level
-  const starter = useMemo(() => shuffle(getWordsByLength(3))[0]?.word || 'cat', [level])
+  const [starter] = useState(() => shuffle(getWordsByLength(3))[0]?.word || 'cat')
   const [requiredLetter, setRequiredLetter] = useState(starter[0])
   const [input, setInput] = useState('')
   const [chain, setChain] = useState([])
