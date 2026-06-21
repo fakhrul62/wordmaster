@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CROSSCLUE_GRIDS, getDifficultyForLevel, getXPForLevel } from '../utils/wordUtils'
 
 function getGridForLevel(level) {
@@ -38,7 +38,7 @@ function CrossClue({ level, onComplete, showToast }) {
     window.setTimeout(() => hiddenInput.current?.focus(), 0)
   }
 
-  function typeLetter(letter) {
+  const typeLetter = useCallback((letter) => {
     if (!/^[a-z]$/i.test(letter)) return
     const currentAnswer = (answers[activeIndex] || '').padEnd(active.word.length, ' ')
     const nextAnswer = `${currentAnswer.slice(0, cursor)}${letter.toLowerCase()}${currentAnswer.slice(cursor + 1)}`.trimEnd()
@@ -47,14 +47,28 @@ function CrossClue({ level, onComplete, showToast }) {
     setCursor(Math.min(active.word.length - 1, cursor + 1))
     const complete = grid.entries.every((entry, index) => nextAnswers[index] === entry.word)
     if (complete) onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
-  }
+  }, [active.word.length, activeIndex, answers, cursor, grid.entries, level, onComplete])
 
-  function erase() {
+  const erase = useCallback(() => {
     const currentAnswer = (answers[activeIndex] || '').padEnd(active.word.length, ' ')
     const target = currentAnswer[cursor] ? cursor : Math.max(0, cursor - 1)
     setAnswers({ ...answers, [activeIndex]: `${currentAnswer.slice(0, target)} ${currentAnswer.slice(target + 1)}`.trimEnd() })
     setCursor(target)
-  }
+  }, [active.word.length, activeIndex, answers, cursor])
+
+  useEffect(() => {
+    const keyboard = (event) => {
+      if (/^[a-z]$/i.test(event.key)) {
+        event.preventDefault()
+        typeLetter(event.key)
+      } else if (event.key === 'Backspace') {
+        event.preventDefault()
+        erase()
+      }
+    }
+    window.addEventListener('keydown', keyboard)
+    return () => window.removeEventListener('keydown', keyboard)
+  }, [erase, typeLetter])
 
   function cellValue(cell) {
     for (const position of cell.entries) {
@@ -99,9 +113,8 @@ function CrossClue({ level, onComplete, showToast }) {
         inputMode="text"
         autoComplete="off"
         value=""
-        onChange={(event) => typeLetter(event.target.value.slice(-1))}
+        onChange={() => {}}
         onKeyDown={(event) => {
-          if (event.key === 'Backspace') erase()
           if (event.key === 'Enter' && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
         }}
         aria-label="Crossword letter input"

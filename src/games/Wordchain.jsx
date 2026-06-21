@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
-import { getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
+import { ALL_WORDS, getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
 function Wordchain({ level, onComplete, showToast }) {
   const maxTime = Math.max(6, 15 - Math.floor(level / 3))
@@ -53,10 +53,19 @@ function Wordchain({ level, onComplete, showToast }) {
     const nextScore = score + word.length * 10
     setChain(nextChain)
     setScore(nextScore)
-    setRequiredLetter(word.at(-1))
+    const naturalNext = word.at(-1)
+    const hasContinuation = ALL_WORDS.some((entry) =>
+      entry.word.startsWith(naturalNext) && !nextChain.includes(entry.word))
+    if (hasContinuation) {
+      setRequiredLetter(naturalNext)
+    } else {
+      const wildcard = shuffle(ALL_WORDS.filter((entry) => !nextChain.includes(entry.word)))[0]?.word[0] || 'a'
+      setRequiredLetter(wildcard)
+      showToast(`Dead end — wildcard letter ${wildcard.toUpperCase()}!`, 'info')
+    }
     setInput('')
     setTimeLeft(maxTime)
-    showToast('Chain extended!', 'success')
+    if (hasContinuation) showToast('Chain extended!', 'success')
     if (nextChain.length >= targetChain) onComplete(nextScore, getXPForLevel(level), level + 1)
   }
 
