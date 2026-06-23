@@ -21,9 +21,6 @@ const makeBoard = () =>
     col: index % BOARD_SIZE,
   }))
 
-const isAdjacent = (a, b) =>
-  Math.abs(a.row - b.row) <= 1 && Math.abs(a.col - b.col) <= 1 && a.id !== b.id
-
 async function isDictionaryWord(word) {
   const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
   return response.ok
@@ -66,16 +63,12 @@ function Boggle({ showToast }) {
     if (expired) return
     setPath((items) => {
       if (items.some(({ id }) => id === tile.id)) return items
-      const previous = items.at(-1)
-      if (previous && !isAdjacent(previous, tile)) return items
       return [...items, tile]
     })
   }
 
   function isTileAvailable(tile) {
-    if (expired || selectedIds.has(tile.id)) return false
-    const previous = path.at(-1)
-    return !previous || isAdjacent(previous, tile)
+    return !expired && !selectedIds.has(tile.id)
   }
 
   function tileFromPoint(clientX, clientY) {
