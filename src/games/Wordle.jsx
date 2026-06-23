@@ -147,11 +147,13 @@ function Wordle({ showToast }) {
   }
 
   const gap = 6
+  const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
   const tileSize = Math.floor(Math.max(42, Math.min(
-    72,
+    88,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - 430 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - keyboardHeight - 230 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
+  const keyHeight = Math.floor((keyboardHeight - 16) / 3)
 
   return (
     <div className="game-panel wordle-panel">
@@ -184,7 +186,7 @@ function Wordle({ showToast }) {
           <button className="btn-primary" onClick={reset}>NEW GAME</button>
         </section>
       )}
-      <section className="wordle-keyboard" aria-label="Keyboard">
+      <section className="wordle-keyboard" style={{ '--wordle-key-height': `${keyHeight}px` }} aria-label="Keyboard">
         {KEYS.map((row) => (
           <div className="wordle-key-row" key={row}>
             {row === 'zxcvbnm' && <button className="wordle-key wide" onClick={submit}>ENTER</button>}
