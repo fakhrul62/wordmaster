@@ -126,7 +126,7 @@ function Wordle({ showToast }) {
   }
 
   return (
-    <div className="game-panel">
+    <div className="game-panel wordle-panel">
       <div className="status-row">
         <span className="neutral-status">{wordLength} letters</span>
         <strong>{guesses.length}/{MAX_ATTEMPTS}</strong>
