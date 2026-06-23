@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { normalizeUsername } from '../utils/wordUtils'
 
 const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock', 'wordle', 'boggle']
@@ -34,6 +34,15 @@ function readPlayer(username) {
 export function usePlayerData() {
   const [player, setPlayer] = useState(null)
   const [storageWarning, setStorageWarning] = useState(false)
+
+  useEffect(() => {
+    try {
+      const username = localStorage.getItem('wordmaster_current_user')
+      if (username) setPlayer(readPlayer(username))
+    } catch {
+      setStorageWarning(true)
+    }
+  }, [])
 
   const selectPlayer = useCallback((username) => {
     const nextPlayer = readPlayer(username)

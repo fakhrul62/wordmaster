@@ -24,6 +24,10 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  useEffect(() => {
+    if (player && screen === 'setup') setScreen('home')
+  }, [player, screen])
+
   function handleGameComplete(gameKey, score, xpEarned, nextLevel) {
     saveProgress(gameKey, { score, levelReached: nextLevel, xpEarned })
     setGameParams({ gameKey, level: nextLevel })
