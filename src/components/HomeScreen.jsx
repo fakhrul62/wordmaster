@@ -7,6 +7,8 @@ const GAMES = [
   { key: 'crossclue', icon: '✣', name: 'CrossClue', desc: 'Solve compact crosswords one clue at a time.', color: 'cyan' },
   { key: 'wordshrink', icon: '▽', name: 'WordShrink', desc: 'Remove one letter and keep making words.', color: 'gold' },
   { key: 'letterlock', icon: '⬡', name: 'LetterLock', desc: 'Find every word hidden in the letter ring.', color: 'green' },
+  { key: 'wordle', icon: '▦', name: 'Wordle', desc: 'Guess the hidden word in six tries.', color: 'cyan' },
+  { key: 'boggle', icon: '✦', name: 'Boggle', desc: 'Trace connected words before time expires.', color: 'purple' },
 ]
 
 function Stars() {
@@ -43,7 +45,7 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
         </section>
         <section className="game-grid" aria-label="Word games">
           {GAMES.map((game, index) => {
-            const progress = player.games[game.key]
+            const progress = player.games[game.key] || { level: 1, highScore: 0 }
             return (
               <article className={`game-card card-${game.color}`} style={{ animationDelay: `${index * 70}ms` }} key={game.key}>
                 <div className="game-card-header">

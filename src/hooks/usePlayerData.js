@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react'
 import { normalizeUsername } from '../utils/wordUtils'
 
-const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock']
+const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock', 'wordle', 'boggle']
+
+const createGames = (existingGames = {}) =>
+  Object.fromEntries(
+    GAME_KEYS.map((key) => [key, { level: 1, highScore: 0, xp: 0, ...existingGames[key] }]),
+  )
 
 function createPlayer(username) {
   return {
@@ -9,9 +14,7 @@ function createPlayer(username) {
     totalXP: 0,
     gamesPlayed: 0,
     lastPlayed: new Date().toISOString().slice(0, 10),
-    games: Object.fromEntries(
-      GAME_KEYS.map((key) => [key, { level: 1, highScore: 0, xp: 0 }]),
-    ),
+    games: createGames(),
   }
 }
 
@@ -20,7 +23,9 @@ const playerKey = (username) => `wordmaster_player_${normalizeUsername(username)
 function readPlayer(username) {
   try {
     const stored = localStorage.getItem(playerKey(username))
-    return stored ? JSON.parse(stored) : createPlayer(username)
+    if (!stored) return createPlayer(username)
+    const player = JSON.parse(stored)
+    return { ...player, games: createGames(player.games) }
   } catch {
     return createPlayer(username)
   }
@@ -44,7 +49,7 @@ export function usePlayerData() {
   const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned }) => {
     setPlayer((current) => {
       if (!current) return current
-      const currentGame = current.games[gameKey]
+      const currentGame = current.games[gameKey] || { level: 1, highScore: 0, xp: 0 }
       const next = {
         ...current,
         totalXP: current.totalXP + xpEarned,
