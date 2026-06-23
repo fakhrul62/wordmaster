@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { getXPForLevel } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
 const BOARD_SIZE = 4
@@ -26,7 +27,7 @@ async function isDictionaryWord(word) {
   return response.ok
 }
 
-function Boggle({ showToast }) {
+function Boggle({ level, onComplete, showToast }) {
   const [minimumLength, setMinimumLength] = useState(null)
   const [board, setBoard] = useState([])
   const [path, setPath] = useState([])
@@ -39,6 +40,7 @@ function Boggle({ showToast }) {
   const selectedIds = useMemo(() => new Set(path.map(({ id }) => id)), [path])
   const currentWord = path.map(({ letter }) => letter).join('')
   const score = found.reduce((total, word) => total + scoreWord(word), 0)
+  const targetScore = 10 + (level - 1) * 5
 
   function start(length) {
     setMinimumLength(length)
@@ -88,8 +90,17 @@ function Boggle({ showToast }) {
     setValidating(true)
     try {
       if (await isDictionaryWord(word)) {
-        setFound((words) => [word, ...words])
-        showToast(`+${scoreWord(word)} ${word.toUpperCase()}`, 'success')
+        const wordScore = scoreWord(word)
+        setFound((words) => {
+          const nextWords = [word, ...words]
+          const nextScore = nextWords.reduce((total, entry) => total + scoreWord(entry), 0)
+          if (nextScore >= targetScore) {
+            setExpired(true)
+            window.setTimeout(() => onComplete(nextScore, getXPForLevel(level), level + 1), 0)
+          }
+          return nextWords
+        })
+        showToast(`+${wordScore} ${word.toUpperCase()}`, 'success')
       } else {
         showToast('Not in the dictionary.', 'error')
       }
@@ -135,7 +146,7 @@ function Boggle({ showToast }) {
       <div className="status-row">
         <span className="neutral-status">Min {minimumLength}</span>
         <strong>{Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</strong>
-        <span>{score} pts</span>
+        <span>{score}/{targetScore} pts</span>
       </div>
       <div className="timer-track" aria-label={`${timeLeft} seconds remaining`}>
         <span style={{ width: `${(timeLeft / GAME_TIME) * 100}%` }} />
