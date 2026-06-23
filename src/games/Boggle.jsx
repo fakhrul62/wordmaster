@@ -170,8 +170,9 @@ function Boggle({ showToast }) {
       </section>
       <section className="boggle-wordbar">
         <strong>{currentWord || (expired ? 'Time up' : 'Trace a word')}</strong>
-        <div className="button-grid">
+        <div className="button-grid boggle-actions">
           <button className="btn-secondary" onClick={() => setPath([])} disabled={expired || !path.length}>CLEAR</button>
+          <button className="btn-secondary" onClick={() => setPath((items) => items.slice(0, -1))} disabled={expired || !path.length} aria-label="Delete last letter">⌫</button>
           <button className="btn-primary" onClick={submit} disabled={expired || validating || !path.length}>
             {validating ? 'CHECKING...' : 'SUBMIT'}
           </button>
