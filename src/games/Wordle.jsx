@@ -148,11 +148,11 @@ function Wordle({ showToast }) {
 
   const gap = 6
   const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
-  const maxTileSize = wordLength <= 3 ? 118 : wordLength === 4 ? 96 : 88
+  const maxTileSize = wordLength <= 3 ? 132 : wordLength === 4 ? 104 : 88
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - keyboardHeight - 230 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - keyboardHeight - 184 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
   const keyHeight = Math.floor((keyboardHeight - 16) / 3)
 
