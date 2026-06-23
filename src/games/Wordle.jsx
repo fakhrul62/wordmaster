@@ -150,7 +150,7 @@ function Wordle({ showToast }) {
   const tileSize = Math.floor(Math.max(42, Math.min(
     72,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - 392 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - 430 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
 
   return (
