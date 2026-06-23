@@ -131,7 +131,14 @@ function Wordle({ showToast }) {
         <span className="neutral-status">{wordLength} letters</span>
         <strong>{guesses.length}/{MAX_ATTEMPTS}</strong>
       </div>
-      <section className="wordle-board" style={{ width: `min(100%, ${wordLength * 46 + (wordLength - 1) * 6}px)` }} aria-label="Wordle guesses">
+      <section
+        className="wordle-board"
+        style={{
+          gridTemplateRows: `repeat(${MAX_ATTEMPTS}, minmax(0, 1fr))`,
+          maxWidth: `${wordLength * 72 + (wordLength - 1) * 6}px`,
+        }}
+        aria-label="Wordle guesses"
+      >
         {ROWS.map((_, rowIndex) => {
           const guess = guesses[rowIndex]
           const letters = guess || (rowIndex === guesses.length ? current : '')
