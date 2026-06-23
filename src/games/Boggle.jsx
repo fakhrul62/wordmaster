@@ -67,10 +67,6 @@ function Boggle({ showToast }) {
     })
   }
 
-  function isTileAvailable(tile) {
-    return !expired && !selectedIds.has(tile.id)
-  }
-
   function tileFromPoint(clientX, clientY) {
     const element = document.elementFromPoint(clientX, clientY)?.closest('[data-boggle-id]')
     if (!element) return null
@@ -153,7 +149,7 @@ function Boggle({ showToast }) {
       >
         {board.map((tile) => (
           <button
-            className={`boggle-tile ${selectedIds.has(tile.id) ? 'selected' : ''} ${!isTileAvailable(tile) && !selectedIds.has(tile.id) ? 'unavailable' : ''}`}
+            className={`boggle-tile ${selectedIds.has(tile.id) ? 'selected' : ''}`}
             data-boggle-id={tile.id}
             disabled={expired}
             key={tile.id}
