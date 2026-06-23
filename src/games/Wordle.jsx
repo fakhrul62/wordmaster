@@ -37,6 +37,10 @@ function Wordle({ showToast }) {
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
   const [status, setStatus] = useState('playing')
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }))
 
   const keyStates = useMemo(() => guesses.reduce((states, guess) => {
     scoreGuess(guess, answer).forEach((state, index) => {
@@ -92,6 +96,23 @@ function Wordle({ showToast }) {
   }
 
   useEffect(() => {
+    function resize() {
+      const visualViewport = window.visualViewport
+      setViewport({
+        width: visualViewport?.width || window.innerWidth,
+        height: visualViewport?.height || window.innerHeight,
+      })
+    }
+    resize()
+    window.addEventListener('resize', resize)
+    window.visualViewport?.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('resize', resize)
+      window.visualViewport?.removeEventListener('resize', resize)
+    }
+  }, [])
+
+  useEffect(() => {
     function onKeyDown(event) {
       if (!wordLength) return
       if (event.key === 'Enter') {
@@ -125,6 +146,13 @@ function Wordle({ showToast }) {
     )
   }
 
+  const gap = 6
+  const tileSize = Math.floor(Math.max(42, Math.min(
+    72,
+    (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
+    (viewport.height - 392 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+  )))
+
   return (
     <div className="game-panel wordle-panel">
       <div className="status-row">
@@ -133,10 +161,7 @@ function Wordle({ showToast }) {
       </div>
       <section
         className="wordle-board"
-        style={{
-          gridTemplateRows: `repeat(${MAX_ATTEMPTS}, minmax(0, 1fr))`,
-          maxWidth: `${wordLength * 72 + (wordLength - 1) * 6}px`,
-        }}
+        style={{ '--wordle-tile': `${tileSize}px`, '--wordle-gap': `${gap}px` }}
         aria-label="Wordle guesses"
       >
         {ROWS.map((_, rowIndex) => {
