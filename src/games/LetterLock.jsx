@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { triggerHaptic } from '../utils/haptics'
 import { getLetterLockSets, getSubWords, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
 function bestCenterLetter(source, candidates) {
@@ -8,7 +9,7 @@ function bestCenterLetter(source, candidates) {
     candidates.filter((word) => word.includes(a)).length)[0]
 }
 
-function LetterLock({ level, onComplete, showToast }) {
+function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
   const [set] = useState(() => shuffle(getLetterLockSets())[0])
   const source = set?.word || 'present'
   const allValidWords = useMemo(() => getSubWords(source), [source])
@@ -69,6 +70,7 @@ function LetterLock({ level, onComplete, showToast }) {
     setAnswer((value) => {
       const available = source.split('').filter((item) => item === letter).length
       const used = value.split('').filter((item) => item === letter).length
+      if (used < available) triggerHaptic(hapticsEnabled)
       return used < available ? value + letter : value
     })
   }
@@ -96,7 +98,18 @@ function LetterLock({ level, onComplete, showToast }) {
         <div><small>Score</small><strong>{score}</strong></div>
       </div>
       <div className="letterlock-answer" aria-label={`Current answer: ${answer || 'empty'}`}>
-        {answer ? answer.split('').map((letter, index) => <span key={`${letter}-${index}`}>{letter}</span>) : <em>Tap letters to spell</em>}
+        {answer ? answer.split('').map((letter, index) => (
+          <button
+            className="letterlock-answer-letter"
+            key={`${letter}-${index}`}
+            onClick={() => {
+              triggerHaptic(hapticsEnabled)
+              setAnswer((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
+            }}
+          >
+            {letter}
+          </button>
+        )) : <em>Tap letters to spell</em>}
       </div>
       <div className="button-grid">
         <button className="btn-secondary" onClick={() => setAnswer('')}>CLEAR</button>

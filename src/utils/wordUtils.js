@@ -28,6 +28,14 @@ export const getWordsByLength = (length) => ALL_WORDS.filter((word) => word.leng
 export const getWordsByCategory = (category) => ALL_WORDS.filter((word) => word.category === category)
 export const getWordsByCategoryAndLength = (category, length) =>
   ALL_WORDS.filter((word) => word.category === category && word.length === length)
+export const getWordleAnswerCandidates = (length) => {
+  const preferredCategory = length <= 5 ? 'common' : 'medium'
+  const preferred = getWordsByCategoryAndLength(preferredCategory, length)
+  const fallback = ALL_WORDS.filter((entry) => entry.length === length)
+  return (preferred.length ? preferred : fallback)
+    .map(({ word }) => word)
+    .filter(isPlayableDictionaryWord)
+}
 export const shuffle = (items) => [...items].sort(() => Math.random() - 0.5)
 export const getAnagramWords = (minimum = 1) =>
   ALL_WORDS.filter((word) => word.anagrams.length >= minimum)

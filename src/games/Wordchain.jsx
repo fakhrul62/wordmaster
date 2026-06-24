@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { triggerHaptic } from '../utils/haptics'
 import { VALID_WORDS, getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
-function Wordchain({ level, onComplete, showToast }) {
+function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
   const maxTime = Math.max(6, 15 - Math.floor(level / 3))
   const targetChain = 5 + level
   const [starter] = useState(() => shuffle(getWordsByLength(3))[0]?.word || 'cat')
@@ -87,7 +88,11 @@ function Wordchain({ level, onComplete, showToast }) {
         <input
           type="text"
           value={input}
-          onChange={(event) => setInput(event.target.value.replace(/[^a-z]/gi, ''))}
+          onChange={(event) => {
+            const nextValue = event.target.value.replace(/[^a-z]/gi, '')
+            if (nextValue.length > input.length) triggerHaptic(hapticsEnabled)
+            setInput(nextValue)
+          }}
           placeholder="Type a word..."
           autoComplete="off"
           autoCorrect="off"

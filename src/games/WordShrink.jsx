@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { triggerHaptic } from '../utils/haptics'
 import { getShrinkableWords, getXPForLevel, isValidWord, shuffle, VALID_WORDS } from '../utils/wordUtils'
 
-function WordShrink({ level, onComplete, showToast }) {
+function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
   const startLength = level <= 5 ? 6 : level <= 10 ? 7 : 8
   const start = useMemo(() => shuffle(getShrinkableWords(startLength))[0], [startLength])
   const [removedIndex, setRemovedIndex] = useState(null)
@@ -32,6 +33,12 @@ function WordShrink({ level, onComplete, showToast }) {
   }
 
   function chooseLetter(index) {
+    triggerHaptic(hapticsEnabled)
+    if (removedIndex === index) {
+      setRemovedIndex(null)
+      setInput('')
+      return
+    }
     const nextRemaining = currentWord.split('').filter((_, itemIndex) => itemIndex !== index).join('')
     const arrangement = getArrangement(nextRemaining)
     setRemovedIndex(index)
@@ -85,7 +92,11 @@ function WordShrink({ level, onComplete, showToast }) {
       <form className="game-form" onSubmit={confirm}>
         <label htmlFor="shrink-answer">New arrangement</label>
         <input id="shrink-answer" type="text" value={input}
-          onChange={(event) => setInput(event.target.value.replace(/[^a-z]/gi, ''))}
+          onChange={(event) => {
+            const nextValue = event.target.value.replace(/[^a-z]/gi, '')
+            if (nextValue.length > input.length) triggerHaptic(hapticsEnabled)
+            setInput(nextValue)
+          }}
           inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="off"
           disabled={removedIndex === null} placeholder="Arrange remaining letters..." />
         <div className="button-grid">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { triggerHaptic } from '../utils/haptics'
 import { CROSSCLUE_GRIDS, getDifficultyForLevel, getXPForLevel } from '../utils/wordUtils'
 
 function getGridForLevel(level) {
@@ -7,7 +8,7 @@ function getGridForLevel(level) {
   return pool[(level - 1) % pool.length]
 }
 
-function CrossClue({ level, onComplete, showToast }) {
+function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
   const grid = useMemo(() => getGridForLevel(level), [level])
   const [answers, setAnswers] = useState({})
   const [activeIndex, setActiveIndex] = useState(0)
@@ -45,6 +46,7 @@ function CrossClue({ level, onComplete, showToast }) {
 
   const typeLetter = useCallback((letter) => {
     if (!/^[a-z]$/i.test(letter)) return
+    triggerHaptic(hapticsEnabled)
     const entryIndex = activeIndexRef.current
     const position = cursorRef.current
     const entry = grid.entries[entryIndex]
@@ -64,9 +66,10 @@ function CrossClue({ level, onComplete, showToast }) {
     setCursor(nextCursor)
     const complete = grid.entries.every((entry, index) => nextAnswers[index] === entry.word)
     if (complete) onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
-  }, [cells, grid.entries, level, onComplete])
+  }, [cells, grid.entries, hapticsEnabled, level, onComplete])
 
   const erase = useCallback(() => {
+    triggerHaptic(hapticsEnabled)
     const entryIndex = activeIndexRef.current
     const entry = grid.entries[entryIndex]
     const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
@@ -85,7 +88,7 @@ function CrossClue({ level, onComplete, showToast }) {
     cursorRef.current = target
     setAnswers(nextAnswers)
     setCursor(target)
-  }, [cells, grid.entries])
+  }, [cells, grid.entries, hapticsEnabled])
 
   useEffect(() => {
     hiddenInput.current?.focus()
@@ -128,7 +131,12 @@ function CrossClue({ level, onComplete, showToast }) {
               key={`${row}-${col}`}
               onClick={() => {
                 const position = cell.entries.find(({ entryIndex }) => entryIndex === activeIndex) || cell.entries[0]
-                selectEntry(position.entryIndex, position.index)
+                const sameCell = activeIndexRef.current === position.entryIndex && cursorRef.current === position.index
+                if (sameCell && cellValue(cell)) {
+                  erase()
+                } else {
+                  selectEntry(position.entryIndex, position.index)
+                }
               }}
               aria-label={`Row ${row + 1}, column ${col + 1}`}
             >

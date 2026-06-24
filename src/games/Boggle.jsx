@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
@@ -27,7 +28,7 @@ async function isDictionaryWord(word) {
   return response.ok
 }
 
-function Boggle({ level, onComplete, showToast }) {
+function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
   const [minimumLength, setMinimumLength] = useState(null)
   const [board, setBoard] = useState([])
   const [path, setPath] = useState([])
@@ -61,10 +62,16 @@ function Boggle({ level, onComplete, showToast }) {
     setExpired(false)
   }
 
-  function selectTile(tile) {
+  function selectTile(tile, allowToggle = true) {
     if (expired) return
     setPath((items) => {
+      if (items.at(-1)?.id === tile.id) {
+        if (!allowToggle) return items
+        triggerHaptic(hapticsEnabled)
+        return items.slice(0, -1)
+      }
       if (items.some(({ id }) => id === tile.id)) return items
+      triggerHaptic(hapticsEnabled)
       return [...items, tile]
     })
   }
@@ -165,13 +172,12 @@ function Boggle({ level, onComplete, showToast }) {
             disabled={expired}
             key={tile.id}
             onMouseDown={() => { setIsDragging(true); selectTile(tile) }}
-            onMouseEnter={() => { if (isDragging) selectTile(tile) }}
-            onClick={() => selectTile(tile)}
+            onMouseEnter={() => { if (isDragging) selectTile(tile, false) }}
             onTouchStart={(event) => { setIsDragging(true); selectTile(tile); event.preventDefault() }}
             onTouchMove={(event) => {
               const touch = event.touches[0]
               const nextTile = tileFromPoint(touch.clientX, touch.clientY)
-              if (nextTile) selectTile(nextTile)
+              if (nextTile) selectTile(nextTile, false)
               event.preventDefault()
             }}
           >
@@ -183,7 +189,6 @@ function Boggle({ level, onComplete, showToast }) {
         <strong>{currentWord || (expired ? 'Time up' : 'Trace a word')}</strong>
         <div className="button-grid boggle-actions">
           <button className="btn-secondary" onClick={() => setPath([])} disabled={expired || !path.length}>CLEAR</button>
-          <button className="btn-secondary" onClick={() => setPath((items) => items.slice(0, -1))} disabled={expired || !path.length} aria-label="Delete last letter">⌫</button>
           <button className="btn-primary" onClick={submit} disabled={expired || validating || !path.length}>
             {validating ? 'CHECKING...' : 'SUBMIT'}
           </button>

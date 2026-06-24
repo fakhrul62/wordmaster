@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { triggerHaptic } from '../utils/haptics'
 import { getCategoryForDifficulty, getDifficultyForLevel, getXPForLevel, getWordsByCategory, shuffle } from '../utils/wordUtils'
 
 function scramble(word) {
@@ -7,7 +8,7 @@ function scramble(word) {
   return letters.map((letter, index) => ({ letter, id: `${index}-${letter}` }))
 }
 
-function AnagramVault({ level, onComplete, showToast }) {
+function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
   const wordCount = 3 + Math.floor(level / 2)
   const timeLimit = Math.max(30, 90 - level * 2)
   const words = useMemo(() => {
@@ -68,7 +69,12 @@ function AnagramVault({ level, onComplete, showToast }) {
   }, [tiles])
 
   function choose(tile) {
-    setSelected((items) => items.some(({ id }) => id === tile.id) ? items : [...items, tile])
+    setSelected((items) => {
+      triggerHaptic(hapticsEnabled)
+      return items.some(({ id }) => id === tile.id)
+        ? items.filter(({ id }) => id !== tile.id)
+        : [...items, tile]
+    })
   }
 
   function submit() {
@@ -112,14 +118,21 @@ function AnagramVault({ level, onComplete, showToast }) {
           <div className="tile-row">
             {tiles.map((tile) => (
               <button className={`tile ${selected.some(({ id }) => id === tile.id) ? 'selected' : ''}`} key={tile.id}
-                onClick={() => choose(tile)} disabled={selected.some(({ id }) => id === tile.id)}>{tile.letter}</button>
+                onClick={() => choose(tile)}>{tile.letter}</button>
             ))}
           </div>
         </div>
         <div><p className="puzzle-label">Your answer</p>
           <div className="answer-slots">
             {Array.from({ length: current.word.length }, (_, index) => (
-              <button className="tile answer-slot" key={index} onClick={() => setSelected((items) => items.filter((_, itemIndex) => itemIndex !== index))}>
+              <button
+                className="tile answer-slot"
+                key={index}
+                onClick={() => {
+                  if (selected[index]) triggerHaptic(hapticsEnabled)
+                  setSelected((items) => items.filter((_, itemIndex) => itemIndex !== index))
+                }}
+              >
                 {selected[index]?.letter || ''}
               </button>
             ))}

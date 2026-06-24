@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
-import wordleAnswers from '../data/wordleAnswers.json'
-import { isValidWord, shuffle } from '../utils/wordUtils'
+import { useEffect, useRef, useState } from 'react'
+import { triggerHaptic } from '../utils/haptics'
+import { getWordleAnswerCandidates, isValidWord, shuffle } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
 const MAX_ATTEMPTS = 6
 const ROWS = Array.from({ length: MAX_ATTEMPTS })
-const KEYS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']
-const RANK = { absent: 1, present: 2, correct: 3 }
 const FALLBACK_WORDS = { 3: 'cat', 4: 'word', 5: 'crane', 6: 'planet' }
 
 function pickWord(length) {
-  const pool = wordleAnswers[String(length)] || []
+  const pool = getWordleAnswerCandidates(length)
   return shuffle(pool)[0] || FALLBACK_WORDS[length]
 }
 
@@ -32,24 +30,17 @@ function scoreGuess(guess, answer) {
   return result
 }
 
-function Wordle({ showToast }) {
+function Wordle({ showToast, hapticsEnabled = true }) {
   const [wordLength, setWordLength] = useState(null)
   const [answer, setAnswer] = useState('')
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
   const [status, setStatus] = useState('playing')
+  const inputRef = useRef(null)
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
   }))
-
-  const keyStates = useMemo(() => guesses.reduce((states, guess) => {
-    scoreGuess(guess, answer).forEach((state, index) => {
-      const letter = guess[index]
-      if (!states[letter] || RANK[state] > RANK[states[letter]]) states[letter] = state
-    })
-    return states
-  }, {}), [answer, guesses])
 
   function start(length) {
     setWordLength(length)
@@ -57,6 +48,7 @@ function Wordle({ showToast }) {
     setGuesses([])
     setCurrent('')
     setStatus('playing')
+    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function reset() {
@@ -67,13 +59,24 @@ function Wordle({ showToast }) {
     setStatus('playing')
   }
 
-  function addLetter(letter) {
-    if (status !== 'playing' || !wordLength) return
-    setCurrent((value) => value.length < wordLength ? `${value}${letter}` : value)
+  function focusInput() {
+    if (status === 'playing') inputRef.current?.focus()
   }
 
-  function removeLetter() {
-    if (status === 'playing') setCurrent((value) => value.slice(0, -1))
+  function setTypedWord(value) {
+    if (status !== 'playing' || !wordLength) return
+    const next = value.replace(/[^a-z]/gi, '').toLowerCase().slice(0, wordLength)
+    setCurrent((previous) => {
+      if (next !== previous) triggerHaptic(hapticsEnabled)
+      return next
+    })
+  }
+
+  function removeLetterAt(index) {
+    if (status !== 'playing') return
+    triggerHaptic(hapticsEnabled)
+    setCurrent((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
+    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function submit() {
@@ -117,24 +120,6 @@ function Wordle({ showToast }) {
     }
   }, [])
 
-  useEffect(() => {
-    function onKeyDown(event) {
-      if (!wordLength) return
-      if (event.key === 'Enter') {
-        event.preventDefault()
-        submit()
-        return
-      }
-      if (event.key === 'Backspace') {
-        removeLetter()
-        return
-      }
-      if (/^[a-z]$/i.test(event.key)) addLetter(event.key.toLowerCase())
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  })
-
   if (!wordLength) {
     return (
       <div className="game-panel">
@@ -152,14 +137,13 @@ function Wordle({ showToast }) {
   }
 
   const gap = 6
-  const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
+  const actionHeight = 58
   const maxTileSize = wordLength <= 3 ? 132 : wordLength === 4 ? 104 : 88
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - keyboardHeight - 184 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - actionHeight - 142 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
-  const keyHeight = Math.floor((keyboardHeight - 16) / 3)
 
   return (
     <div className="game-panel wordle-panel">
@@ -171,6 +155,7 @@ function Wordle({ showToast }) {
         className="wordle-board"
         style={{ '--wordle-tile': `${tileSize}px`, '--wordle-gap': `${gap}px` }}
         aria-label="Wordle guesses"
+        onClick={focusInput}
       >
         {ROWS.map((_, rowIndex) => {
           const guess = guesses[rowIndex]
@@ -178,9 +163,15 @@ function Wordle({ showToast }) {
           const states = guess ? scoreGuess(guess, answer) : []
           return (
             <div className="wordle-row" style={{ gridTemplateColumns: `repeat(${wordLength}, 1fr)` }} key={rowIndex}>
-              {Array.from({ length: wordLength }, (__, index) => (
-                <span className={`wordle-tile ${states[index] || ''}`} key={index}>{letters[index] || ''}</span>
-              ))}
+              {Array.from({ length: wordLength }, (__, index) => {
+                const letter = letters[index] || ''
+                const isEditableLetter = !guess && letter
+                return isEditableLetter ? (
+                  <button className="wordle-tile editable" key={index} onClick={() => removeLetterAt(index)}>{letter}</button>
+                ) : (
+                  <span className={`wordle-tile ${states[index] || ''}`} key={index}>{letter}</span>
+                )
+              })}
             </div>
           )
         })}
@@ -192,17 +183,31 @@ function Wordle({ showToast }) {
           <button className="btn-primary" onClick={reset}>NEW GAME</button>
         </section>
       )}
-      <section className="wordle-keyboard" style={{ '--wordle-key-height': `${keyHeight}px` }} aria-label="Keyboard">
-        {KEYS.map((row) => (
-          <div className="wordle-key-row" key={row}>
-            {row === 'zxcvbnm' && <button className="wordle-key wide" onClick={submit}>ENTER</button>}
-            {row.split('').map((letter) => (
-              <button className={`wordle-key ${keyStates[letter] || ''}`} key={letter} onClick={() => addLetter(letter)}>{letter}</button>
-            ))}
-            {row === 'zxcvbnm' && <button className="wordle-key wide" onClick={removeLetter}>⌫</button>}
-          </div>
-        ))}
-      </section>
+      <form className="wordle-entry" onSubmit={(event) => { event.preventDefault(); submit() }}>
+        <input
+          ref={inputRef}
+          className="wordle-device-input"
+          type="text"
+          value={current}
+          onChange={(event) => setTypedWord(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              submit()
+            }
+          }}
+          inputMode="text"
+          enterKeyHint="done"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck="false"
+          autoComplete="off"
+          autoFocus
+          disabled={status !== 'playing'}
+          aria-label={`${wordLength}-letter guess`}
+        />
+        <button className="btn-primary wordle-submit" type="submit" disabled={status !== 'playing'} aria-label="Submit guess">↵</button>
+      </form>
     </div>
   )
 }
