@@ -3,7 +3,22 @@ import englishWords from 'an-array-of-english-words'
 
 export const ALL_WORDS = wordData.words
 export const CROSSCLUE_GRIDS = wordData.crossclueGrids
-export const VALID_WORDS = englishWords.filter((word) => /^[a-z]{3,}$/.test(word))
+const BLOCKED_WORDS = new Set([
+  'aaa',
+  'aaaa',
+  'aaaaa',
+  'mon',
+  'zzz',
+])
+
+export const isPlayableDictionaryWord = (word = '') => {
+  const normalized = word.toLowerCase()
+  return /^[a-z]{3,15}$/.test(normalized) &&
+    !/^(.)\1+$/.test(normalized) &&
+    !BLOCKED_WORDS.has(normalized)
+}
+
+export const VALID_WORDS = englishWords.filter(isPlayableDictionaryWord)
 export const WORD_SET = new Set(VALID_WORDS)
 const WORD_MAP = Object.fromEntries(ALL_WORDS.map((entry) => [entry.word, entry]))
 

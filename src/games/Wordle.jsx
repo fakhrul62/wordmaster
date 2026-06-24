@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { VALID_WORDS, shuffle } from '../utils/wordUtils'
+import wordleAnswers from '../data/wordleAnswers.json'
+import { isValidWord, shuffle } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
 const MAX_ATTEMPTS = 6
@@ -9,7 +10,7 @@ const RANK = { absent: 1, present: 2, correct: 3 }
 const FALLBACK_WORDS = { 3: 'cat', 4: 'word', 5: 'crane', 6: 'planet' }
 
 function pickWord(length) {
-  const pool = VALID_WORDS.filter((word) => word.length === length)
+  const pool = wordleAnswers[String(length)] || []
   return shuffle(pool)[0] || FALLBACK_WORDS[length]
 }
 
@@ -79,6 +80,10 @@ function Wordle({ showToast }) {
     if (status !== 'playing' || !wordLength) return
     if (current.length !== wordLength) {
       showToast(`Enter a ${wordLength}-letter word.`, 'error')
+      return
+    }
+    if (!isValidWord(current)) {
+      showToast(`'${current.toUpperCase()}' is not in the word list.`, 'error')
       return
     }
     const nextGuesses = [...guesses, current]
