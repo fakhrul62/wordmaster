@@ -86,6 +86,15 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     setCurrent((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
   }
 
+  function removeLastLetter() {
+    if (status !== 'playing') return
+    setCurrent((value) => {
+      if (!value) return value
+      triggerHaptic(hapticsEnabled)
+      return value.slice(0, -1)
+    })
+  }
+
   function submit() {
     if (status !== 'playing' || !wordLength) return
     if (current.length !== wordLength) {
@@ -145,7 +154,7 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
       }
       if (event.key === 'Backspace') {
         event.preventDefault()
-        setCurrent((value) => value.slice(0, -1))
+        removeLastLetter()
         return
       }
       if (/^[a-z]$/i.test(event.key)) addLetter(event.key.toLowerCase())
@@ -171,15 +180,16 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
   }
 
   const gap = 6
-  const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
-  const reservedHeight = keyboardHeight + 240
+  const keyboardHeight = Math.floor(Math.max(188, Math.min(238, viewport.height * 0.25)))
+  const submitHeight = Math.max(46, Math.min(54, Math.floor(viewport.height * 0.055)))
+  const reservedHeight = keyboardHeight + submitHeight + 252
   const maxTileSize = wordLength <= 3 ? 132 : wordLength === 4 ? 104 : 88
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
     (viewport.height - reservedHeight - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
-  const keyHeight = Math.floor((keyboardHeight - 16) / 3)
+  const keyHeight = Math.floor((keyboardHeight - submitHeight - 28) / 3)
   const targetScore = getTargetScore(level, wordLength)
 
   return (
@@ -221,17 +231,25 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
           <button className="btn-primary" onClick={reset}>NEW GAME</button>
         </section>
       )}
-      <section className="wordle-keyboard" style={{ '--wordle-key-height': `${keyHeight}px` }} aria-label="Keyboard">
+      <section
+        className="wordle-keyboard"
+        style={{
+          '--wordle-key-height': `${keyHeight}px`,
+          '--wordle-submit-height': `${submitHeight}px`,
+        }}
+        aria-label="Keyboard"
+      >
         {KEYS.map((row) => (
           <div className="wordle-key-row" key={row}>
-            {row === 'zxcvbnm' && (
-              <button className="wordle-key wide wordle-submit" onClick={submit} aria-label="Submit guess">↵</button>
-            )}
             {row.split('').map((letter) => (
               <button className="wordle-key" key={letter} onClick={() => addLetter(letter)}>{letter}</button>
             ))}
+            {row === 'zxcvbnm' && (
+              <button className="wordle-key wide wordle-backspace" onClick={removeLastLetter} aria-label="Delete last letter">⌫</button>
+            )}
           </div>
         ))}
+        <button className="btn-primary wordle-submit" onClick={submit}>SUBMIT</button>
       </section>
     </div>
   )
