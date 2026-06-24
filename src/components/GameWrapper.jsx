@@ -43,9 +43,10 @@ function spawnConfetti() {
 
 function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
   const [result, setResult] = useState(null)
+  const [confirmLeave, setConfirmLeave] = useState(false)
   const Game = GAME_COMPONENTS[gameKey]
   function leaveGame() {
-    if (window.confirm('Leave this game? Current level progress will be lost.')) onBack()
+    setConfirmLeave(true)
   }
 
   function finish(score, xp, nextLevel) {
@@ -77,6 +78,19 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
             <button className="btn-primary" onClick={() => setResult(null)}>NEXT LEVEL</button>
             <button className="btn-secondary" onClick={onBack}>HOME</button>
           </div>
+        </div>
+      )}
+      {confirmLeave && (
+        <div className="leave-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="leave-confirm-title">
+          <section className="leave-confirm-card">
+            <p className="eyebrow">Pause run</p>
+            <h2 id="leave-confirm-title">Leave this level?</h2>
+            <p>Your current level progress will be lost.</p>
+            <div className="btn-row">
+              <button className="btn-secondary" onClick={() => setConfirmLeave(false)}>STAY</button>
+              <button className="btn-primary" onClick={onBack}>LEAVE</button>
+            </div>
+          </section>
         </div>
       )}
     </main>

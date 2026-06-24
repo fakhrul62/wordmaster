@@ -48,9 +48,15 @@ function CrossClue({ level, onComplete, showToast }) {
     const entryIndex = activeIndexRef.current
     const position = cursorRef.current
     const entry = grid.entries[entryIndex]
-    const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
-    const nextAnswer = `${currentAnswer.slice(0, position)}${letter.toLowerCase()}${currentAnswer.slice(position + 1)}`.trimEnd()
-    const nextAnswers = { ...answersRef.current, [entryIndex]: nextAnswer }
+    const row = entry.row + (entry.direction === 'down' ? position : 0)
+    const col = entry.col + (entry.direction === 'across' ? position : 0)
+    const cell = cells.get(`${row}-${col}`)
+    const nextAnswers = { ...answersRef.current }
+    ;(cell?.entries || [{ entryIndex, index: position }]).forEach(({ entryIndex: linkedEntryIndex, index }) => {
+      const linkedEntry = grid.entries[linkedEntryIndex]
+      const currentAnswer = (nextAnswers[linkedEntryIndex] || '').padEnd(linkedEntry.word.length, ' ')
+      nextAnswers[linkedEntryIndex] = `${currentAnswer.slice(0, index)}${letter.toLowerCase()}${currentAnswer.slice(index + 1)}`.trimEnd()
+    })
     const nextCursor = Math.min(entry.word.length - 1, position + 1)
     answersRef.current = nextAnswers
     cursorRef.current = nextCursor
@@ -58,7 +64,7 @@ function CrossClue({ level, onComplete, showToast }) {
     setCursor(nextCursor)
     const complete = grid.entries.every((entry, index) => nextAnswers[index] === entry.word)
     if (complete) onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
-  }, [grid.entries, level, onComplete])
+  }, [cells, grid.entries, level, onComplete])
 
   const erase = useCallback(() => {
     const entryIndex = activeIndexRef.current
@@ -66,17 +72,23 @@ function CrossClue({ level, onComplete, showToast }) {
     const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
     const position = cursorRef.current
     const target = currentAnswer[position] ? position : Math.max(0, position - 1)
-    const nextAnswers = {
-      ...answersRef.current,
-      [entryIndex]: `${currentAnswer.slice(0, target)} ${currentAnswer.slice(target + 1)}`.trimEnd(),
-    }
+    const row = entry.row + (entry.direction === 'down' ? target : 0)
+    const col = entry.col + (entry.direction === 'across' ? target : 0)
+    const cell = cells.get(`${row}-${col}`)
+    const nextAnswers = { ...answersRef.current }
+    ;(cell?.entries || [{ entryIndex, index: target }]).forEach(({ entryIndex: linkedEntryIndex, index }) => {
+      const linkedEntry = grid.entries[linkedEntryIndex]
+      const linkedAnswer = (nextAnswers[linkedEntryIndex] || '').padEnd(linkedEntry.word.length, ' ')
+      nextAnswers[linkedEntryIndex] = `${linkedAnswer.slice(0, index)} ${linkedAnswer.slice(index + 1)}`.trimEnd()
+    })
     answersRef.current = nextAnswers
     cursorRef.current = target
     setAnswers(nextAnswers)
     setCursor(target)
-  }, [grid.entries])
+  }, [cells, grid.entries])
 
   useEffect(() => {
+    hiddenInput.current?.focus()
     const keyboard = (event) => {
       if (/^[a-z]$/i.test(event.key)) {
         event.preventDefault()
@@ -132,10 +144,18 @@ function CrossClue({ level, onComplete, showToast }) {
         type="text"
         inputMode="text"
         autoComplete="off"
-        value=""
-        onChange={() => {}}
+        defaultValue=""
+        onInput={(event) => {
+          const value = event.currentTarget.value
+          const letter = value.match(/[a-z]/i)?.[0]
+          if (letter) typeLetter(letter)
+          event.currentTarget.value = ''
+        }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
+          if (event.key === 'Backspace') {
+            event.preventDefault()
+            erase()
+          } else if (event.key === 'Enter' && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
         }}
         aria-label="Crossword letter input"
       />

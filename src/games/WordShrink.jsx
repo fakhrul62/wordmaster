@@ -15,9 +15,32 @@ function WordShrink({ level, onComplete, showToast }) {
     ? ''
     : currentWord.split('').filter((_, index) => index !== removedIndex).join('')
 
-  function chooseLetter(index) {
-    setRemovedIndex(index)
+  function applyShrink(answer) {
+    const nextScore = score + answer.length * 25
+    setScore(nextScore)
+    setHistory((words) => [...words, answer])
+    setRemovedIndex(null)
     setInput('')
+    showToast('Perfect shrink!', 'success')
+    if (answer.length === 3) onComplete(nextScore, getXPForLevel(level), level + 1)
+  }
+
+  function getArrangement(letters) {
+    const signature = [...letters].sort().join('')
+    return VALID_WORDS.find((word) =>
+      word.length === letters.length && [...word].sort().join('') === signature)
+  }
+
+  function chooseLetter(index) {
+    const nextRemaining = currentWord.split('').filter((_, itemIndex) => itemIndex !== index).join('')
+    const arrangement = getArrangement(nextRemaining)
+    setRemovedIndex(index)
+    setInput(arrangement || nextRemaining)
+    if (!arrangement) {
+      showToast('No valid word from that removal. Try another letter.', 'error')
+      return
+    }
+    window.setTimeout(() => applyShrink(arrangement), 0)
   }
 
   function confirm(event) {
@@ -28,19 +51,11 @@ function WordShrink({ level, onComplete, showToast }) {
       return showToast('Use every remaining letter exactly once.', 'error')
     }
     if (!isValidWord(answer)) return showToast(`'${answer}' is not a valid word.`, 'error')
-    const nextScore = score + answer.length * 25
-    setScore(nextScore)
-    setHistory((words) => [...words, answer])
-    setRemovedIndex(null)
-    setInput('')
-    showToast('Perfect shrink!', 'success')
-    if (answer.length === 3) onComplete(nextScore, getXPForLevel(level), level + 1)
+    applyShrink(answer)
   }
 
   function hint() {
-    const signature = [...remaining].sort().join('')
-    const target = VALID_WORDS.find((word) =>
-      word.length === remaining.length && [...word].sort().join('') === signature)
+    const target = getArrangement(remaining)
     if (!target) return showToast('Try removing a different letter.', 'info')
     setInput(target)
     setScore((value) => Math.max(0, value - 10))
@@ -68,7 +83,7 @@ function WordShrink({ level, onComplete, showToast }) {
         )}
       </section>
       <form className="game-form" onSubmit={confirm}>
-        <label htmlFor="shrink-answer">Type the new arrangement</label>
+        <label htmlFor="shrink-answer">New arrangement</label>
         <input id="shrink-answer" type="text" value={input}
           onChange={(event) => setInput(event.target.value.replace(/[^a-z]/gi, ''))}
           inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="off"
