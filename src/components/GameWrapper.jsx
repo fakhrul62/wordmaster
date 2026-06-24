@@ -1,5 +1,5 @@
 import LevelBadge from './LevelBadge'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { readHapticsPreference, triggerHaptic, writeHapticsPreference } from '../utils/haptics'
 import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
@@ -29,6 +29,44 @@ const GAME_COMPONENTS = {
   boggle: Boggle,
 }
 
+const GAME_RULES = {
+  wordchain: [
+    'Enter a valid word that starts with the required letter.',
+    'Each accepted word sets the next required letter from its last letter.',
+    'Reused or invalid words do not count. Build the target chain before hearts run out.',
+  ],
+  anagramvault: [
+    'Tap scrambled tiles to build the answer.',
+    'Tap a selected tile again, or tap a filled answer slot, to remove that letter.',
+    'Solve the sequence before the timer resets.',
+  ],
+  crossclue: [
+    'Tap a clue or cell to choose where to type.',
+    'Fill every crossing answer correctly.',
+    'Tap the active filled cell again to erase that letter and replace it.',
+  ],
+  wordshrink: [
+    'Tap one letter to remove it, then make a valid word from all remaining letters.',
+    'Tap the selected removed letter again to undo before confirming.',
+    'Shrink the word down to 3 letters to finish the level.',
+  ],
+  letterlock: [
+    'Build valid words from the letter ring.',
+    'Every word must include the center letter.',
+    'Tap an entered answer letter to remove it before submitting.',
+  ],
+  wordle: [
+    'Pick a word length, then guess the hidden word in six tries.',
+    'Green means correct spot, yellow means wrong spot, and gray means absent.',
+    'Tap an entered tile in the current row to delete that letter. Use the enter icon to submit.',
+  ],
+  boggle: [
+    'Trace connected tiles to spell words at least the chosen length.',
+    'Tap the last selected tile again to remove it before submitting.',
+    'Submit valid words to reach the target score before time runs out.',
+  ],
+}
+
 function spawnConfetti() {
   const colors = ['#8268ff', '#ff5f8f', '#5cf8d0', '#ffd45c', '#5cf8a0']
   for (let index = 0; index < 10; index += 1) {
@@ -46,7 +84,13 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
   const [result, setResult] = useState(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [hapticsEnabled, setHapticsEnabled] = useState(readHapticsPreference)
+  const [rulesAccepted, setRulesAccepted] = useState(false)
   const Game = GAME_COMPONENTS[gameKey]
+  const rules = GAME_RULES[gameKey]
+
+  useEffect(() => {
+    setRulesAccepted(false)
+  }, [gameKey, level])
 
   function toggleHaptics() {
     setHapticsEnabled((enabled) => {
@@ -85,7 +129,18 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
         </div>
       </header>
       <section className="game-content">
-        {Game ? (
+        {Game && rules && !rulesAccepted ? (
+          <section className="rules-panel" aria-labelledby="rules-title">
+            <p className="eyebrow">How to play</p>
+            <h1 id="rules-title">{GAME_NAMES[gameKey]}</h1>
+            <ul className="rules-list">
+              {rules.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+            <button className="btn-primary" onClick={() => setRulesAccepted(true)}>START</button>
+          </section>
+        ) : Game ? (
           <Game
             key={`${gameKey}-${level}`}
             level={level}
