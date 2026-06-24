@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const MODE_OPTIONS = [
   { key: 'dark', label: 'Dark' },
   { key: 'light', label: 'Light' },
@@ -11,9 +13,26 @@ const COLOR_OPTIONS = [
   { key: 'gold', label: 'Gold' },
 ]
 
-function SettingsScreen({ settings, onChange, onBack }) {
+function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStatus, syncError, onBack }) {
+  const [email, setEmail] = useState(player?.accountEmail || '')
+  const [accountError, setAccountError] = useState('')
+  const [saving, setSaving] = useState(false)
+
   function update(partial) {
     onChange((current) => ({ ...current, ...partial }))
+  }
+
+  async function submitAccount(event) {
+    event.preventDefault()
+    setSaving(true)
+    setAccountError('')
+    try {
+      await onConnectAccount(email)
+    } catch (error) {
+      setAccountError(error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -29,6 +48,30 @@ function SettingsScreen({ settings, onChange, onBack }) {
           <h2 id="settings-title">Theme</h2>
         </div>
         <section className="settings-panel">
+          <div className="settings-group">
+            <h3>Account</h3>
+            <form className="account-form" onSubmit={submitAccount} noValidate>
+              <label htmlFor="account-email">Email</label>
+              <div className="account-row">
+                <input
+                  id="account-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => { setEmail(event.target.value); setAccountError('') }}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
+                <button className="btn-primary" type="submit" disabled={saving}>
+                  {saving ? 'SAVING' : player?.accountEmail ? 'SYNC' : 'SAVE'}
+                </button>
+              </div>
+              <p className={`account-status ${syncStatus === 'error' || accountError ? 'error' : ''}`}>
+                {accountError || syncError || (player?.accountEmail
+                  ? `Saving to ${player.accountEmail}`
+                  : 'Playing as guest. Progress is saved on this device.')}
+              </p>
+            </form>
+          </div>
           <div className="settings-group">
             <h3>Mode</h3>
             <div className="segmented-control">

@@ -22,8 +22,8 @@ function App() {
   const [toast, setToast] = useState(null)
   const [themeSettings, setThemeSettings] = useState(readThemeSettings)
   const {
-    player, selectPlayer, saveProgress, switchPlayer, getLeaderboard,
-    storageWarning,
+    player, selectPlayer, saveProgress, connectAccount, switchPlayer, getLeaderboard,
+    syncStatus, syncError, storageWarning,
   } = usePlayerData()
 
   function showToast(message, type = 'info') {
@@ -77,8 +77,12 @@ function App() {
       )}
       {screen === 'settings' && (
         <SettingsScreen
+          player={player}
           settings={themeSettings}
           onChange={setThemeSettings}
+          onConnectAccount={connectAccount}
+          syncStatus={syncStatus}
+          syncError={syncError}
           onBack={() => setScreen(player ? 'home' : 'setup')}
         />
       )}
