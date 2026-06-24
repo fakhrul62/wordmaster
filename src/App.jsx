@@ -1,14 +1,26 @@
 import { useEffect, useState } from 'react'
 import GameWrapper from './components/GameWrapper'
 import HomeScreen from './components/HomeScreen'
+import SettingsScreen from './components/SettingsScreen'
 import Toast from './components/Toast'
 import UserSetup from './components/UserSetup'
 import { usePlayerData } from './hooks/usePlayerData'
+
+const DEFAULT_THEME = { mode: 'dark', color: 'violet' }
+
+function readThemeSettings() {
+  try {
+    return { ...DEFAULT_THEME, ...JSON.parse(localStorage.getItem('wordmaster_theme') || '{}') }
+  } catch {
+    return DEFAULT_THEME
+  }
+}
 
 function App() {
   const [screen, setScreen] = useState('setup')
   const [gameParams, setGameParams] = useState(null)
   const [toast, setToast] = useState(null)
+  const [themeSettings, setThemeSettings] = useState(readThemeSettings)
   const {
     player, selectPlayer, saveProgress, switchPlayer, getLeaderboard,
     storageWarning,
@@ -27,6 +39,17 @@ function App() {
   useEffect(() => {
     if (player && screen === 'setup') setScreen('home')
   }, [player, screen])
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.theme = themeSettings.mode
+    root.dataset.color = themeSettings.color
+    try {
+      localStorage.setItem('wordmaster_theme', JSON.stringify(themeSettings))
+    } catch {
+      // The selected theme still applies for this session.
+    }
+  }, [themeSettings])
 
   function handleGameComplete(gameKey, score, xpEarned, nextLevel) {
     saveProgress(gameKey, { score, levelReached: nextLevel, xpEarned })
@@ -47,6 +70,16 @@ function App() {
             setScreen('game')
           }}
           onSwitchPlayer={() => { switchPlayer(); setScreen('setup') }}
+        />
+      )}
+      {screen === 'home' && player && (
+        <button className="settings-fab" onClick={() => setScreen('settings')} aria-label="Open settings">⚙</button>
+      )}
+      {screen === 'settings' && (
+        <SettingsScreen
+          settings={themeSettings}
+          onChange={setThemeSettings}
+          onBack={() => setScreen(player ? 'home' : 'setup')}
         />
       )}
       {screen === 'game' && gameParams && (
