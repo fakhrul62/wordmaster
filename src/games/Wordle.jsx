@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
 import { getWordleAnswerCandidates, isValidWord, shuffle } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
 const MAX_ATTEMPTS = 6
 const ROWS = Array.from({ length: MAX_ATTEMPTS })
+const KEYS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']
 const FALLBACK_WORDS = { 3: 'cat', 4: 'word', 5: 'crane', 6: 'planet' }
 
 function pickWord(length) {
@@ -36,7 +37,6 @@ function Wordle({ showToast, hapticsEnabled = true }) {
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
   const [status, setStatus] = useState('playing')
-  const inputRef = useRef(null)
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -48,7 +48,6 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     setGuesses([])
     setCurrent('')
     setStatus('playing')
-    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function reset() {
@@ -59,16 +58,12 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     setStatus('playing')
   }
 
-  function focusInput() {
-    if (status === 'playing') inputRef.current?.focus()
-  }
-
-  function setTypedWord(value) {
+  function addLetter(letter) {
     if (status !== 'playing' || !wordLength) return
-    const next = value.replace(/[^a-z]/gi, '').toLowerCase().slice(0, wordLength)
     setCurrent((previous) => {
-      if (next !== previous) triggerHaptic(hapticsEnabled)
-      return next
+      if (previous.length >= wordLength) return previous
+      triggerHaptic(hapticsEnabled)
+      return `${previous}${letter}`
     })
   }
 
@@ -76,7 +71,6 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     if (status !== 'playing') return
     triggerHaptic(hapticsEnabled)
     setCurrent((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
-    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function submit() {
@@ -120,6 +114,25 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     }
   }, [])
 
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (!wordLength) return
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        submit()
+        return
+      }
+      if (event.key === 'Backspace') {
+        event.preventDefault()
+        setCurrent((value) => value.slice(0, -1))
+        return
+      }
+      if (/^[a-z]$/i.test(event.key)) addLetter(event.key.toLowerCase())
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
+
   if (!wordLength) {
     return (
       <div className="game-panel">
@@ -137,13 +150,14 @@ function Wordle({ showToast, hapticsEnabled = true }) {
   }
 
   const gap = 6
-  const actionHeight = 58
+  const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
   const maxTileSize = wordLength <= 3 ? 132 : wordLength === 4 ? 104 : 88
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - actionHeight - 142 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - keyboardHeight - 184 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
+  const keyHeight = Math.floor((keyboardHeight - 16) / 3)
 
   return (
     <div className="game-panel wordle-panel">
@@ -155,7 +169,6 @@ function Wordle({ showToast, hapticsEnabled = true }) {
         className="wordle-board"
         style={{ '--wordle-tile': `${tileSize}px`, '--wordle-gap': `${gap}px` }}
         aria-label="Wordle guesses"
-        onClick={focusInput}
       >
         {ROWS.map((_, rowIndex) => {
           const guess = guesses[rowIndex]
@@ -183,31 +196,18 @@ function Wordle({ showToast, hapticsEnabled = true }) {
           <button className="btn-primary" onClick={reset}>NEW GAME</button>
         </section>
       )}
-      <form className="wordle-entry" onSubmit={(event) => { event.preventDefault(); submit() }}>
-        <input
-          ref={inputRef}
-          className="wordle-device-input"
-          type="text"
-          value={current}
-          onChange={(event) => setTypedWord(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              submit()
-            }
-          }}
-          inputMode="text"
-          enterKeyHint="done"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck="false"
-          autoComplete="off"
-          autoFocus
-          disabled={status !== 'playing'}
-          aria-label={`${wordLength}-letter guess`}
-        />
-        <button className="btn-primary wordle-submit" type="submit" disabled={status !== 'playing'} aria-label="Submit guess">↵</button>
-      </form>
+      <section className="wordle-keyboard" style={{ '--wordle-key-height': `${keyHeight}px` }} aria-label="Keyboard">
+        {KEYS.map((row) => (
+          <div className="wordle-key-row" key={row}>
+            {row === 'zxcvbnm' && (
+              <button className="wordle-key wide wordle-submit" onClick={submit} aria-label="Submit guess">↵</button>
+            )}
+            {row.split('').map((letter) => (
+              <button className="wordle-key" key={letter} onClick={() => addLetter(letter)}>{letter}</button>
+            ))}
+          </div>
+        ))}
+      </section>
     </div>
   )
 }
