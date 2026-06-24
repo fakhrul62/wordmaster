@@ -58,6 +58,7 @@ const GAME_RULES = {
   wordle: [
     'Pick a word length, then guess the hidden word in six tries.',
     'Green means correct spot, yellow means wrong spot, and gray means absent.',
+    'Solve fast enough to hit the point target and unlock the next level.',
     'Tap an entered tile in the current row to delete that letter. Use the enter icon to submit.',
   ],
   boggle: [

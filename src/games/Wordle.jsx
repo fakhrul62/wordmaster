@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
-import { getWordleAnswerCandidates, isValidWord, shuffle } from '../utils/wordUtils'
+import { getWordleAnswerCandidates, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 
 const LENGTHS = [3, 4, 5, 6]
 const MAX_ATTEMPTS = 6
@@ -31,12 +32,22 @@ function scoreGuess(guess, answer) {
   return result
 }
 
-function Wordle({ showToast, hapticsEnabled = true }) {
+function getWinScore(wordLength, guessCount) {
+  const speedBonus = (MAX_ATTEMPTS - guessCount + 1) * 25
+  return wordLength * 50 + speedBonus
+}
+
+function getTargetScore(level, wordLength) {
+  return wordLength * 50 + Math.min(100, Math.floor((level - 1) * 8))
+}
+
+function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
   const [wordLength, setWordLength] = useState(null)
   const [answer, setAnswer] = useState('')
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
   const [status, setStatus] = useState('playing')
+  const [score, setScore] = useState(0)
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -48,6 +59,7 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     setGuesses([])
     setCurrent('')
     setStatus('playing')
+    setScore(0)
   }
 
   function reset() {
@@ -56,6 +68,7 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     setGuesses([])
     setCurrent('')
     setStatus('playing')
+    setScore(0)
   }
 
   function addLetter(letter) {
@@ -87,8 +100,16 @@ function Wordle({ showToast, hapticsEnabled = true }) {
     setGuesses(nextGuesses)
     setCurrent('')
     if (current === answer) {
+      const nextScore = getWinScore(wordLength, nextGuesses.length)
+      const targetScore = getTargetScore(level, wordLength)
+      setScore(nextScore)
       setStatus('won')
-      showToast('All green. Nicely solved.', 'success')
+      if (nextScore >= targetScore) {
+        showToast('All green. Level cleared.', 'success')
+        onComplete(nextScore, getXPForLevel(level), level + 1)
+      } else {
+        showToast(`Solved, but you need ${targetScore} points to level up.`, 'info')
+      }
       return
     }
     if (nextGuesses.length >= MAX_ATTEMPTS) {
@@ -151,19 +172,23 @@ function Wordle({ showToast, hapticsEnabled = true }) {
 
   const gap = 6
   const keyboardHeight = Math.floor(Math.max(150, Math.min(230, viewport.height * 0.24)))
+  const reservedHeight = keyboardHeight + 240
   const maxTileSize = wordLength <= 3 ? 132 : wordLength === 4 ? 104 : 88
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - keyboardHeight - 184 - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - reservedHeight - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
   )))
   const keyHeight = Math.floor((keyboardHeight - 16) / 3)
+  const targetScore = getTargetScore(level, wordLength)
 
   return (
     <div className="game-panel wordle-panel">
+      <ScoreBar score={score} xp={getXPForLevel(level)} />
       <div className="status-row">
         <span className="neutral-status">{wordLength} letters</span>
         <strong>{guesses.length}/{MAX_ATTEMPTS}</strong>
+        <span>{score}/{targetScore} pts</span>
       </div>
       <section
         className="wordle-board"
