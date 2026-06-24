@@ -116,7 +116,7 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
     <main className="screen game-wrapper">
       <header className="game-topbar">
         <button className="back-button" onClick={leaveGame}>← Back</button>
-        <strong>{GAME_NAMES[gameKey]}</strong>
+        <h1 className="game-topbar-title">{GAME_NAMES[gameKey]}</h1>
         <div className="game-topbar-actions">
           <button
             className={`haptic-toggle ${hapticsEnabled ? 'enabled' : ''}`}
