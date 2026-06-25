@@ -1,6 +1,8 @@
 import LevelBadge from './LevelBadge'
 import { useEffect, useState } from 'react'
 import { readHapticsPreference, triggerHaptic, writeHapticsPreference } from '../utils/haptics'
+import { GAME_NAMES } from '../data/gameCatalog'
+import { getLevelMap } from '../utils/progression'
 import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
 import CrossClue from '../games/CrossClue'
@@ -8,16 +10,6 @@ import WordShrink from '../games/WordShrink'
 import LetterLock from '../games/LetterLock'
 import Wordle from '../games/Wordle'
 import Boggle from '../games/Boggle'
-
-const GAME_NAMES = {
-  wordchain: 'WordChain',
-  anagramvault: 'Anagram Vault',
-  crossclue: 'CrossClue',
-  wordshrink: 'WordShrink',
-  letterlock: 'LetterLock',
-  wordle: 'Wordle',
-  boggle: 'Boggle',
-}
 
 const GAME_COMPONENTS = {
   wordchain: Wordchain,
@@ -81,15 +73,20 @@ function spawnConfetti() {
   }
 }
 
-function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
+function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete, showToast }) {
   const [result, setResult] = useState(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [hapticsEnabled, setHapticsEnabled] = useState(readHapticsPreference)
+  const [selectedLevel, setSelectedLevel] = useState(level)
+  const [levelSelectionOpen, setLevelSelectionOpen] = useState(true)
   const [rulesAccepted, setRulesAccepted] = useState(false)
   const Game = GAME_COMPONENTS[gameKey]
   const rules = GAME_RULES[gameKey]
+  const visibleLevels = getLevelMap(unlockedLevel)
 
   useEffect(() => {
+    setSelectedLevel(level)
+    setLevelSelectionOpen(true)
     setRulesAccepted(false)
   }, [gameKey, level])
 
@@ -112,6 +109,16 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
     spawnConfetti()
   }
 
+  function chooseLevel(nextLevel) {
+    if (nextLevel > unlockedLevel) return
+    setSelectedLevel(nextLevel)
+  }
+
+  function startSelectedLevel() {
+    setLevelSelectionOpen(false)
+    setRulesAccepted(false)
+  }
+
   return (
     <main className="screen game-wrapper">
       <header className="game-topbar">
@@ -126,14 +133,41 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
           >
             {hapticsEnabled ? 'VIB ON' : 'VIB OFF'}
           </button>
-          <LevelBadge level={level} />
+          <LevelBadge level={selectedLevel} />
         </div>
       </header>
       <section className="game-content">
-        {Game && rules && !rulesAccepted ? (
+        {Game && levelSelectionOpen ? (
+          <section className="level-select-panel" aria-labelledby="level-select-title">
+            <p className="eyebrow">Level progression</p>
+            <h1 id="level-select-title">{GAME_NAMES[gameKey]}</h1>
+            <div className="level-select-summary">
+              <span><small>Current</small><strong>LV {unlockedLevel}</strong></span>
+              <span><small>Next unlock</small><strong>LV {unlockedLevel + 1}</strong></span>
+            </div>
+            <div className="level-map" aria-label="Level selection">
+              {visibleLevels.map((entry) => (
+                <button
+                  className={`level-node ${entry.current ? 'current' : ''} ${entry.next ? 'next' : ''} ${selectedLevel === entry.level ? 'selected' : ''}`}
+                  disabled={!entry.unlocked}
+                  key={entry.level}
+                  onClick={() => chooseLevel(entry.level)}
+                >
+                  <span>{entry.unlocked ? entry.level : '🔒'}</span>
+                  <small>{entry.current ? 'Current' : entry.next ? 'Locked' : entry.unlocked ? 'Open' : 'Soon'}</small>
+                </button>
+              ))}
+            </div>
+            <button className="btn-primary" onClick={startSelectedLevel}>START LEVEL {selectedLevel}</button>
+          </section>
+        ) : Game && rules && !rulesAccepted ? (
           <section className="rules-panel" aria-labelledby="rules-title">
             <p className="eyebrow">How to play</p>
             <h1 id="rules-title">{GAME_NAMES[gameKey]}</h1>
+            <div className="rules-level-row">
+              <LevelBadge level={selectedLevel} />
+              <button className="btn-secondary" onClick={() => setLevelSelectionOpen(true)}>CHANGE</button>
+            </div>
             <ul className="rules-list">
               {rules.map((rule) => (
                 <li key={rule}>{rule}</li>
@@ -143,8 +177,8 @@ function GameWrapper({ gameKey, level, onBack, onComplete, showToast }) {
           </section>
         ) : Game ? (
           <Game
-            key={`${gameKey}-${level}`}
-            level={level}
+            key={`${gameKey}-${selectedLevel}`}
+            level={selectedLevel}
             onComplete={finish}
             showToast={showToast}
             hapticsEnabled={hapticsEnabled}
