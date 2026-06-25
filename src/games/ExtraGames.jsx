@@ -151,25 +151,63 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
     grid.forEach((row, rowIndex) => row.forEach((letter, colIndex) => {
       if (!letter) grid[rowIndex][colIndex] = ALPHABET[Math.floor(Math.random() * ALPHABET.length)]
     }))
-    return { words, grid, placements }
+    return { words, grid, placements, targetWords }
   }, [level])
   const [selected, setSelected] = useState([])
   const [found, setFound] = useState([])
+  const [foundPaths, setFoundPaths] = useState({})
   const score = scoreFor(found)
+
+  function isAdjacent(previousCell, nextCell) {
+    const [previousRow, previousCol] = previousCell.split('-').map(Number)
+    const [nextRow, nextCol] = nextCell.split('-').map(Number)
+    return Math.max(Math.abs(previousRow - nextRow), Math.abs(previousCol - nextCol)) === 1
+  }
+
+  function wordFromPath(path) {
+    return path.map((item) => {
+      const [row, col] = item.split('-').map(Number)
+      return puzzle.grid[row][col]
+    }).join('')
+  }
 
   function choose(cell) {
     triggerHaptic(hapticsEnabled)
-    const next = selected.includes(cell) ? selected.filter((item) => item !== cell) : [...selected, cell]
+    const lastSelected = selected.at(-1)
+    const selectedIndex = selected.indexOf(cell)
+    const next = selectedIndex >= 0
+      ? selected.slice(0, selectedIndex)
+      : lastSelected && !isAdjacent(lastSelected, cell)
+        ? [cell]
+        : [...selected, cell]
     setSelected(next)
-    const match = puzzle.words.find((word) =>
+    const hiddenMatch = puzzle.words.find((word) =>
       !found.includes(word) &&
       next.join('|') === puzzle.placements[word].join('|'))
+    const tracedWord = wordFromPath(next)
+    const match = hiddenMatch || (
+      tracedWord.length >= 4 &&
+      isValidWord(tracedWord) &&
+      !found.includes(tracedWord)
+        ? tracedWord
+        : ''
+    )
     if (!match) return
     const nextFound = [...found, match]
+    const nextPaths = { ...foundPaths, [match]: next }
     setFound(nextFound)
+    setFoundPaths(nextPaths)
     setSelected([])
     showToast(`${match.toUpperCase()} found`, 'success')
-    if (nextFound.length === puzzle.words.length) finishGame(onComplete, level, scoreFor(nextFound, 100))
+    if (nextFound.length >= puzzle.targetWords) finishGame(onComplete, level, scoreFor(nextFound, 100))
+  }
+
+  function useHint() {
+    const hintWord = puzzle.words.find((word) => !found.includes(word))
+    if (!hintWord) return showToast('No hints left on this board.', 'info')
+    triggerHaptic(hapticsEnabled)
+    setSelected([puzzle.placements[hintWord][0]])
+    showToast('Start from the highlighted tile.', 'info')
   }
 
   return (
@@ -177,13 +215,13 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
       <ScoreBar score={score} xp={getXPForLevel(level)} />
       <div className="status-row">
         <span className="neutral-status">Found</span>
-        <strong>{found.length}/{puzzle.words.length}</strong>
+        <strong>{found.length}/{puzzle.targetWords}</strong>
         {selected.length > 0 && <span>{selected.length} selected</span>}
       </div>
       <div className="word-search-grid" style={{ gridTemplateColumns: `repeat(${size},1fr)` }}>
         {puzzle.grid.flatMap((row, rowIndex) => row.map((letter, colIndex) => {
           const cell = `${rowIndex}-${colIndex}`
-          const solved = found.some((word) => puzzle.placements[word].includes(cell))
+          const solved = Object.values(foundPaths).some((path) => path.includes(cell))
           return (
             <button className={`word-search-cell ${selected.includes(cell) ? 'selected' : ''} ${solved ? 'correct' : ''}`} key={cell} onClick={() => choose(cell)}>
               {letter}
@@ -192,6 +230,7 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
         }))}
       </div>
       <div className="word-search-actions">
+        <button className="btn-secondary" onClick={useHint} disabled={found.length >= puzzle.targetWords}>HINT</button>
         <button className="btn-secondary" onClick={() => setSelected([])} disabled={!selected.length}>CLEAR SELECTION</button>
       </div>
     </div>

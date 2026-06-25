@@ -91,9 +91,9 @@ const GAME_RULES = {
     'Submit valid words to reach the target score. Fast clears are tracked silently.',
   ],
   wordsearch: [
-    'Tap letters in the grid to mark hidden words.',
-    'A word is found only when the selected cells match its full hidden path.',
-    'Find every hidden word without an answer list.',
+    'Tap connected letters in the grid to trace real words.',
+    'Any valid connected word of four or more letters counts.',
+    'Use hint to highlight a starting tile without revealing the word.',
   ],
   typingsprint: [
     'Type the displayed word exactly.',
