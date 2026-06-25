@@ -83,11 +83,12 @@ export function getCategoryForDifficulty(difficulty) {
 export const getXPForLevel = (level) => level * 10
 
 export function getRank(xp) {
-  if (xp >= 1500) return 'Grand Wordmaster'
-  if (xp >= 700) return 'Sage'
-  if (xp >= 300) return 'Lexicon'
-  if (xp >= 100) return 'Wordsmith'
-  return 'Apprentice'
+  if (xp >= 4200) return 'Grand Master'
+  if (xp >= 2600) return 'Legend'
+  if (xp >= 1500) return 'Champion'
+  if (xp >= 800) return 'Speed Runner'
+  if (xp >= 350) return 'Puzzle Master'
+  return 'Beginner Explorer'
 }
 
 export const normalizeUsername = (username) =>
