@@ -18,7 +18,10 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
   const activeIndexRef = useRef(0)
   const cursorRef = useRef(0)
   const active = grid.entries[activeIndex]
-  const cellSize = Math.max(36, Math.floor((Math.min(window.innerWidth, 480) - 32) / grid.gridSize))
+  const crosswordWidth = window.innerWidth >= 1180
+    ? Math.min(window.innerWidth * 0.42, 640)
+    : Math.min(window.innerWidth, 480)
+  const cellSize = Math.max(36, Math.floor((crosswordWidth - 32) / grid.gridSize))
 
   const cells = useMemo(() => {
     const map = new Map()

@@ -27,9 +27,11 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
   const [score, setScore] = useState(0)
   const [timeLeft, setTimeLeft] = useState(timeLimit)
   const [paused, setPaused] = useState(false)
-  const containerSize = Math.min(window.innerWidth - 32, 280)
+  const containerSize = window.innerWidth >= 1180
+    ? Math.min(window.innerWidth * 0.32, 430)
+    : Math.min(window.innerWidth - 32, 280)
   const radius = containerSize * 0.33
-  const tileSize = Math.max(44, Math.min(52, containerSize * 0.18))
+  const tileSize = Math.max(44, Math.min(window.innerWidth >= 1180 ? 76 : 52, containerSize * 0.18))
   const positions = [0, 60, 120, 180, 240, 300].map((degrees) => ({
     x: Math.round(Math.cos((degrees - 90) * Math.PI / 180) * radius),
     y: Math.round(Math.sin((degrees - 90) * Math.PI / 180) * radius),

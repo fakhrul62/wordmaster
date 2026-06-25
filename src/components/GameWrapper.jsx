@@ -92,8 +92,8 @@ const GAME_RULES = {
   ],
   wordsearch: [
     'Tap letters in the grid to mark hidden words.',
-    'A word is found when all of its letters are selected.',
-    'Find every listed word to clear the level.',
+    'A word is found only when the selected cells match its full hidden path.',
+    'Find every hidden word without an answer list.',
   ],
   typingsprint: [
     'Type the displayed word exactly.',
@@ -281,7 +281,7 @@ function GameWrapper({
   }
 
   return (
-    <main className="screen game-wrapper">
+    <main className={`screen game-wrapper game-${gameKey}`}>
       <header className="game-topbar">
         <button className="back-button" onClick={leaveGame}>← Back</button>
         <h1 className="game-topbar-title">{GAME_NAMES[gameKey]}</h1>

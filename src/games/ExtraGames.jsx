@@ -87,35 +87,69 @@ function TextAnswer({ value, onChange, onSubmit, placeholder = 'Type answer...' 
 function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   const size = 8
   const puzzle = useMemo(() => {
-    const candidates = pickWordEntries(level, 8, { minLength: 3, maxLength: 6 }).map(({ word }) => word)
+    const targetWords = Math.min(7, 5 + Math.floor(level / 8))
+    const candidates = pickWordEntries(level, targetWords + 12, { minLength: 4, maxLength: 7 }).map(({ word }) => word)
     const grid = Array.from({ length: size }, () => Array.from({ length: size }, () => ''))
     const words = []
     const placements = {}
-    const directions = [[0, 1], [1, 0], [1, 1]]
-    candidates.some((word, wordIndex) => {
-      for (const [rowStep, colStep] of directions) {
-        for (let row = 0; row < size; row += 1) {
-          for (let col = 0; col < size; col += 1) {
-            const endRow = row + rowStep * (word.length - 1)
-            const endCol = col + colStep * (word.length - 1)
-            if (endRow >= size || endCol >= size) continue
-            const cells = word.split('').map((letter, index) => ({
-              letter,
-              row: row + rowStep * index,
-              col: col + colStep * index,
-            }))
-            if (!cells.every((cell) => !grid[cell.row][cell.col] || grid[cell.row][cell.col] === cell.letter)) continue
-            cells.forEach((cell) => { grid[cell.row][cell.col] = cell.letter })
-            words.push(word)
-            placements[word] = cells.map((cell) => `${cell.row}-${cell.col}`)
-            return words.length >= 5
-          }
-        }
-      }
-      return wordIndex === candidates.length - 1
+    const directions = [[0, 1], [1, 0], [1, 1], [1, -1], [0, -1], [-1, 0], [-1, -1], [-1, 1]]
+    const starts = Array.from({ length: size * size }, (_, index) => ({
+      row: Math.floor(index / size),
+      col: index % size,
+    })).sort((a, b) => {
+      const center = (size - 1) / 2
+      return Math.hypot(a.row - center, a.col - center) - Math.hypot(b.row - center, b.col - center)
     })
+
+    function findPath(word) {
+      const canUse = ({ row, col }, letter, used) =>
+        row >= 0 &&
+        row < size &&
+        col >= 0 &&
+        col < size &&
+        !used.has(`${row}-${col}`) &&
+        (!grid[row][col] || grid[row][col] === letter)
+
+      function walk(path, letterIndex, previousDirection, turned, used) {
+        if (letterIndex >= word.length) return turned || word.length < 5 ? path : null
+        const current = path.at(-1)
+        const nextDirections = shuffle(directions).sort((first, second) => {
+          const firstStraight = previousDirection && first[0] === previousDirection[0] && first[1] === previousDirection[1]
+          const secondStraight = previousDirection && second[0] === previousDirection[0] && second[1] === previousDirection[1]
+          return Number(firstStraight) - Number(secondStraight)
+        })
+        for (const direction of nextDirections) {
+          const nextCell = { row: current.row + direction[0], col: current.col + direction[1] }
+          const key = `${nextCell.row}-${nextCell.col}`
+          const nextTurned = turned || Boolean(previousDirection && (direction[0] !== previousDirection[0] || direction[1] !== previousDirection[1]))
+          if (!canUse(nextCell, word[letterIndex], used)) continue
+          used.add(key)
+          const result = walk([...path, { ...nextCell, letter: word[letterIndex] }], letterIndex + 1, direction, nextTurned, used)
+          if (result) return result
+          used.delete(key)
+        }
+        return null
+      }
+
+      for (const start of starts) {
+        const key = `${start.row}-${start.col}`
+        if (!canUse(start, word[0], new Set())) continue
+        const result = walk([{ ...start, letter: word[0] }], 1, null, false, new Set([key]))
+        if (result) return result
+      }
+      return null
+    }
+
+    for (const word of candidates) {
+      const cells = findPath(word)
+      if (!cells) continue
+      cells.forEach((cell) => { grid[cell.row][cell.col] = cell.letter })
+      words.push(word)
+      placements[word] = cells.map((cell) => `${cell.row}-${cell.col}`)
+      if (words.length >= targetWords) break
+    }
     grid.forEach((row, rowIndex) => row.forEach((letter, colIndex) => {
-      if (!letter) grid[rowIndex][colIndex] = ALPHABET[(rowIndex * 7 + colIndex * 11 + level) % ALPHABET.length]
+      if (!letter) grid[rowIndex][colIndex] = ALPHABET[Math.floor(Math.random() * ALPHABET.length)]
     }))
     return { words, grid, placements }
   }, [level])
@@ -128,7 +162,8 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
     const next = selected.includes(cell) ? selected.filter((item) => item !== cell) : [...selected, cell]
     setSelected(next)
     const match = puzzle.words.find((word) =>
-      !found.includes(word) && puzzle.placements[word].every((item) => next.includes(item)))
+      !found.includes(word) &&
+      next.join('|') === puzzle.placements[word].join('|'))
     if (!match) return
     const nextFound = [...found, match]
     setFound(nextFound)
@@ -140,7 +175,11 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
-      <div className="status-row"><span className="neutral-status">Found</span><strong>{found.length}/{puzzle.words.length}</strong></div>
+      <div className="status-row">
+        <span className="neutral-status">Found</span>
+        <strong>{found.length}/{puzzle.words.length}</strong>
+        {selected.length > 0 && <span>{selected.length} selected</span>}
+      </div>
       <div className="word-search-grid" style={{ gridTemplateColumns: `repeat(${size},1fr)` }}>
         {puzzle.grid.flatMap((row, rowIndex) => row.map((letter, colIndex) => {
           const cell = `${rowIndex}-${colIndex}`
@@ -152,8 +191,8 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
           )
         }))}
       </div>
-      <div className="found-words">
-        {puzzle.words.map((word) => <span className={`found-word-chip ${found.includes(word) ? 'pangram' : ''}`} key={word}>{word}</span>)}
+      <div className="word-search-actions">
+        <button className="btn-secondary" onClick={() => setSelected([])} disabled={!selected.length}>CLEAR SELECTION</button>
       </div>
     </div>
   )
@@ -429,7 +468,11 @@ function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true })
   const activeIndexRef = useRef(0)
   const cursorRef = useRef(0)
   const active = grid.entries[activeIndex]
-  const viewportWidth = typeof window === 'undefined' ? 480 : Math.min(window.innerWidth, 480)
+  const viewportWidth = typeof window === 'undefined'
+    ? 480
+    : window.innerWidth >= 1180
+      ? Math.min(window.innerWidth * 0.42, 640)
+      : Math.min(window.innerWidth, 480)
   const cellSize = Math.max(34, Math.floor((viewportWidth - 32) / grid.gridSize))
 
   const cells = useMemo(() => {
