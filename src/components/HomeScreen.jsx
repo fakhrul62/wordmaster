@@ -3,6 +3,7 @@ import { GAME_CATALOG } from '../data/gameCatalog'
 import {
   ACHIEVEMENTS,
   BOGGLE_MODES,
+  formatDuration,
   getEventProgress,
   getGameTrack,
   getPlayerLevel,
@@ -156,7 +157,11 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
                     </div>
                   )}
                   <div className="card-stat">
-                    <span>{game.key === 'boggle' ? `${selectedMode}+ best` : 'Best'} {displayProgress.highScore}</span>
+                    <span>
+                      {game.key === 'boggle'
+                        ? `${selectedMode}+ best ${displayProgress.highScore} · ${formatDuration(displayProgress.bestTime)}`
+                        : `Best ${displayProgress.highScore}`}
+                    </span>
                     <strong>+{nextReward} XP</strong>
                   </div>
                   <button className="btn-primary" onClick={() => onPlayGame(game.key)}>PLAY</button>
@@ -230,7 +235,7 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
           {leaderboard.entries.length ? (
             <div className="table-scroll">
               <table className="leaderboard">
-                <thead><tr><th>#</th><th>Player</th><th className="col-title">Title</th><th>Points</th><th>XP</th></tr></thead>
+                <thead><tr><th>#</th><th>Player</th><th className="col-title">Title</th><th>Points</th><th>Fastest</th><th>XP</th></tr></thead>
                 <tbody>
                   {leaderboard.entries.map((entry, index) => (
                     <tr className={entry.username === player.username ? 'current-player' : ''} key={`${entry.username}-${index}`}>
@@ -238,6 +243,7 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
                       <td>{entry.username}</td>
                       <td className="col-title">{entry.activeTitle || getTitleForXP(entry.totalXP)}</td>
                       <td>{entry.totalPoints || 0}</td>
+                      <td>{formatDuration(entry.bestBoggleTime)}</td>
                       <td>{entry.totalXP}</td>
                     </tr>
                   ))}

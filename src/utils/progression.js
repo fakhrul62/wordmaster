@@ -155,12 +155,26 @@ function seededIndex(seed, length, offset = 0) {
   return (seed + offset * 37) % length
 }
 
+function normalizeBestTime(value) {
+  const time = Number(value)
+  return Number.isFinite(time) && time > 0 ? Math.round(time) : null
+}
+
+function betterBestTime(current, candidate) {
+  const currentTime = normalizeBestTime(current)
+  const candidateTime = normalizeBestTime(candidate)
+  if (!currentTime) return candidateTime
+  if (!candidateTime) return currentTime
+  return Math.min(currentTime, candidateTime)
+}
+
 function createModeProgress(existing = {}) {
   return {
     level: Math.max(1, Number(existing.level) || 1),
     highScore: Math.max(0, Number(existing.highScore) || 0),
     xp: Math.max(0, Number(existing.xp) || 0),
     clears: Math.max(0, Number(existing.clears) || 0),
+    bestTime: normalizeBestTime(existing.bestTime),
     completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
   }
 }
@@ -188,6 +202,23 @@ export function getGameTrack(gameProgress, gameKey, mode = null) {
     return gameProgress?.modes?.[mode] || createModeProgress()
   }
   return gameProgress || createModeProgress()
+}
+
+export function getBestBoggleTime(playerOrGame) {
+  const game = playerOrGame?.games?.boggle || playerOrGame
+  if (!game?.modes) return normalizeBestTime(game?.bestTime)
+  return BOGGLE_MODES
+    .map((mode) => normalizeBestTime(game.modes[mode]?.bestTime))
+    .filter(Boolean)
+    .sort((a, b) => a - b)[0] || null
+}
+
+export function formatDuration(seconds) {
+  const value = normalizeBestTime(seconds)
+  if (!value) return '-'
+  const minutes = Math.floor(value / 60)
+  const remainingSeconds = value % 60
+  return minutes ? `${minutes}:${String(remainingSeconds).padStart(2, '0')}` : `${remainingSeconds}s`
 }
 
 export function getPlayerLevel(totalXP = 0) {
@@ -433,7 +464,11 @@ function updateEvent(player, gameKey, score, didClear) {
   }
 }
 
-export function applyProgressUpdate(current, gameKey, { score = 0, levelReached = 1, xpEarned = 0, mode = null }) {
+export function applyProgressUpdate(
+  current,
+  gameKey,
+  { score = 0, levelReached = 1, xpEarned = 0, mode = null, completionTime = null },
+) {
   const trackMode = gameKey === 'boggle' && BOGGLE_MODES.includes(Number(mode)) ? Number(mode) : null
   const currentGame = current.games[gameKey] || createGameProgress({}, gameKey)
   const currentTrack = getGameTrack(currentGame, gameKey, trackMode)
@@ -446,6 +481,9 @@ export function applyProgressUpdate(current, gameKey, { score = 0, levelReached 
     highScore: Math.max(currentTrack.highScore, score),
     xp: currentTrack.xp + xpEarned,
     clears: currentTrack.clears + (didClear ? 1 : 0),
+    bestTime: gameKey === 'boggle'
+      ? betterBestTime(currentTrack.bestTime, completionTime)
+      : currentTrack.bestTime,
     completedLevels,
   }
   const nextGame = gameKey === 'boggle' && trackMode
@@ -461,6 +499,7 @@ export function applyProgressUpdate(current, gameKey, { score = 0, levelReached 
         highScore: Math.max(currentGame.highScore || 0, score),
         xp: (currentGame.xp || 0) + xpEarned,
         clears: (currentGame.clears || 0) + (didClear ? 1 : 0),
+        bestTime: betterBestTime(currentGame.bestTime, nextTrack.bestTime),
       }
     : nextTrack
   let nextPlayer = {
@@ -555,6 +594,15 @@ function leaderboardScore(player) {
   return (player.totalPoints || 0) + (player.totalXP || 0) + (player.coins || 0) * 2
 }
 
+function compareBestTime(a, b) {
+  const aTime = getBestBoggleTime(a)
+  const bTime = getBestBoggleTime(b)
+  if (aTime && bTime) return aTime - bTime
+  if (aTime) return -1
+  if (bTime) return 1
+  return 0
+}
+
 function makeRivals(seed = 0) {
   return RIVAL_NAMES.map((username, index) => {
     const totalXP = 260 + index * 310 + seededIndex(seed, 150, index)
@@ -577,9 +625,10 @@ export function buildLeaderboard(localPlayers = [], currentPlayer = null) {
     .map((entry) => ({
       ...entry,
       activeTitle: entry.activeTitle || getTitleForXP(entry.totalXP),
+      bestBoggleTime: getBestBoggleTime(entry),
       leaderboardScore: leaderboardScore(entry),
     }))
-    .sort((a, b) => b.leaderboardScore - a.leaderboardScore)
+    .sort((a, b) => (b.leaderboardScore - a.leaderboardScore) || compareBestTime(a, b))
   const currentKey = currentPlayer?.accountEmail || currentPlayer?.username
   const currentRank = merged.findIndex((entry) =>
     (entry.accountEmail || entry.username) === currentKey) + 1

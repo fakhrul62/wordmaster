@@ -205,10 +205,16 @@ export function usePlayerData() {
     return synced
   }, [player])
 
-  const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned, mode }) => {
+  const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned, mode, completionTime }) => {
     setPlayer((current) => {
       if (!current) return current
-      const next = applyProgressUpdate(current, gameKey, { score, levelReached, xpEarned, mode })
+      const next = applyProgressUpdate(current, gameKey, {
+        score,
+        levelReached,
+        xpEarned,
+        mode,
+        completionTime,
+      })
       try {
         writeCurrentPlayer(next)
       } catch {

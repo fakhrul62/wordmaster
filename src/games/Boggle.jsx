@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
 
 const BOARD_SIZE = 4
-const GAME_TIME = 120
 const LETTERS = 'eeeeeeeeeeeeaaaaaaaaaiiiiiiiiioooooooonnnnnnrrrrrrttttttllllssssuuuuddggbbccmmppffhhvvwwyykjxqz'
 
 const scoreWord = (word) => {
@@ -32,10 +31,10 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
   const [board, setBoard] = useState(() => makeBoard())
   const [path, setPath] = useState([])
   const [found, setFound] = useState([])
-  const [timeLeft, setTimeLeft] = useState(GAME_TIME)
   const [isDragging, setIsDragging] = useState(false)
   const [validating, setValidating] = useState(false)
   const [expired, setExpired] = useState(false)
+  const startedAt = useRef(Date.now())
 
   const selectedIds = useMemo(() => new Set(path.map(({ id }) => id)), [path])
   const currentWord = path.map(({ letter }) => letter).join('')
@@ -46,9 +45,9 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
     setBoard(makeBoard())
     setPath([])
     setFound([])
-    setTimeLeft(GAME_TIME)
     setExpired(false)
     setValidating(false)
+    startedAt.current = Date.now()
   }, [])
 
   function selectTile(tile, allowToggle = true) {
@@ -91,8 +90,9 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
           const nextWords = [word, ...words]
           const nextScore = nextWords.reduce((total, entry) => total + scoreWord(entry), 0)
           if (nextScore >= targetScore) {
+            const completionTime = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000))
             setExpired(true)
-            window.setTimeout(() => onComplete(nextScore, getXPForLevel(level), level + 1), 0)
+            window.setTimeout(() => onComplete(nextScore, getXPForLevel(level), level + 1, { completionTime }), 0)
           }
           return nextWords
         })
@@ -112,28 +112,12 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
     reset()
   }, [level, modeLength, reset])
 
-  useEffect(() => {
-    if (expired) return undefined
-    const timer = window.setInterval(() => {
-      setTimeLeft((time) => {
-        if (time > 1) return time - 1
-        setExpired(true)
-        setPath([])
-        return 0
-      })
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [expired])
-
   return (
     <div className="game-panel">
       <div className="status-row">
         <span className="neutral-status">Min {modeLength}</span>
-        <strong>{Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</strong>
+        <strong>{found.length} words</strong>
         <span>{score}/{targetScore} pts</span>
-      </div>
-      <div className="timer-track" aria-label={`${timeLeft} seconds remaining`}>
-        <span style={{ width: `${(timeLeft / GAME_TIME) * 100}%` }} />
       </div>
       <section
         className={`boggle-board ${expired ? 'frozen' : ''}`}
@@ -163,7 +147,7 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
         ))}
       </section>
       <section className="boggle-wordbar">
-        <strong>{currentWord || (expired ? 'Time up' : 'Trace a word')}</strong>
+        <strong>{currentWord || (expired ? 'Level clear' : 'Trace a word')}</strong>
         <div className="button-grid boggle-actions">
           <button className="btn-secondary" onClick={() => setPath([])} disabled={expired || !path.length}>CLEAR</button>
           <button className="btn-primary" onClick={submit} disabled={expired || validating || !path.length}>

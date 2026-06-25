@@ -137,7 +137,13 @@ function App() {
 
   function handleGameComplete(gameKey, score, xpEarned, nextLevel, options = {}) {
     const mode = options.mode ? Number(options.mode) : null
-    saveProgress(gameKey, { score, levelReached: nextLevel, xpEarned, mode })
+    saveProgress(gameKey, {
+      score,
+      levelReached: nextLevel,
+      xpEarned,
+      mode,
+      completionTime: options.completionTime,
+    })
     navigate('game', { gameKey, level: nextLevel, mode }, { replace: true })
   }
 

@@ -131,8 +131,11 @@ function GameWrapper({
     setConfirmLeave(true)
   }
 
-  function finish(score, xp, nextLevel) {
-    onComplete(score, xp, nextLevel, { mode: gameKey === 'boggle' ? selectedMode : null })
+  function finish(score, xp, nextLevel, details = {}) {
+    onComplete(score, xp, nextLevel, {
+      ...details,
+      mode: gameKey === 'boggle' ? selectedMode : null,
+    })
     setSelectedLevel(nextLevel)
     setLevelSelectionOpen(false)
     setRulesAccepted(true)

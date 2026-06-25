@@ -17,13 +17,25 @@ function getClient() {
 }
 
 function createModeProgress(existing = {}) {
+  const bestTime = Number(existing.bestTime)
   return {
     level: Math.max(1, Number(existing.level) || 1),
     highScore: Math.max(0, Number(existing.highScore) || 0),
     xp: Math.max(0, Number(existing.xp) || 0),
     clears: Math.max(0, Number(existing.clears) || 0),
+    bestTime: Number.isFinite(bestTime) && bestTime > 0 ? Math.round(bestTime) : null,
     completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
   }
+}
+
+function betterBestTime(first, second) {
+  const a = Number(first)
+  const b = Number(second)
+  const aTime = Number.isFinite(a) && a > 0 ? Math.round(a) : null
+  const bTime = Number.isFinite(b) && b > 0 ? Math.round(b) : null
+  if (!aTime) return bTime
+  if (!bTime) return aTime
+  return Math.min(aTime, bTime)
 }
 
 function createGameProgress(existing = {}, key = '') {
@@ -110,6 +122,7 @@ function mergePlayers(localPlayer, remotePlayer, email) {
           highScore: Math.max(localMode.highScore, remoteMode.highScore),
           xp: Math.max(localMode.xp, remoteMode.xp),
           clears: Math.max(localMode.clears, remoteMode.clears),
+          bestTime: betterBestTime(localMode.bestTime, remoteMode.bestTime),
           completedLevels: [...new Set([
             ...localMode.completedLevels,
             ...remoteMode.completedLevels,
@@ -124,6 +137,10 @@ function mergePlayers(localPlayer, remotePlayer, email) {
         highScore: Math.max(...BOGGLE_MODES.map((mode) => modes[mode].highScore)),
         xp: Math.max(local.games[key].xp, remote.games[key].xp),
         clears: Math.max(local.games[key].clears, remote.games[key].clears),
+        bestTime: BOGGLE_MODES
+          .map((mode) => modes[mode].bestTime)
+          .filter(Boolean)
+          .sort((a, b) => a - b)[0] || null,
       }
       return
     }
@@ -132,6 +149,7 @@ function mergePlayers(localPlayer, remotePlayer, email) {
       highScore: Math.max(local.games[key].highScore, remote.games[key].highScore),
       xp: Math.max(local.games[key].xp, remote.games[key].xp),
       clears: Math.max(local.games[key].clears, remote.games[key].clears),
+      bestTime: betterBestTime(local.games[key].bestTime, remote.games[key].bestTime),
       completedLevels: [...new Set([
         ...local.games[key].completedLevels,
         ...remote.games[key].completedLevels,
