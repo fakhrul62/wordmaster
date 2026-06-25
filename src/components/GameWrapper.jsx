@@ -141,9 +141,9 @@ const GAME_RULES = {
     'Decode the full sequence to win.',
   ],
   crossworddaily: [
-    'Fill each clue answer in the list.',
-    'Every answer must match its clue and length.',
-    'Check the grid when all answers are filled.',
+    'Tap a cell or clue to choose where to type.',
+    'Fill the crossing answers directly on the crossword grid.',
+    'Check the grid when every clue has been answered.',
   ],
   quotefill: [
     'Read the quote with one missing word.',
@@ -235,6 +235,18 @@ function GameWrapper({
   }
 
   function leaveGame() {
+    if (result) {
+      setResult(null)
+      return
+    }
+    if (!levelSelectionOpen && rulesAccepted) {
+      setRulesAccepted(false)
+      return
+    }
+    if (!levelSelectionOpen && !rulesAccepted) {
+      setLevelSelectionOpen(true)
+      return
+    }
     setConfirmLeave(true)
   }
 
