@@ -108,11 +108,25 @@ input[type='text'],input[type='email']{width:100%;min-height:48px;padding:12px 1
   .game-wordle .wordle-submit{min-height:58px;font-size:17px}
   .game-wordle .wordle-panel .result-panel{position:static;grid-column:2;transform:none;box-shadow:none}
 
-  .game-boggle .game-panel{grid-template-columns:minmax(520px,620px) minmax(420px,1fr);justify-content:center}
-  .game-boggle .boggle-board{width:min(100%,580px);gap:12px}
+  .game-boggle .game-panel{grid-template-columns:minmax(520px,620px) minmax(420px,1fr);grid-template-rows:auto auto minmax(0,1fr);justify-content:center;align-items:start}
+  .game-boggle .boggle-board{grid-row:2/span 2;width:min(100%,580px);gap:12px}
   .game-boggle .boggle-tile{border-radius:14px;font-size:clamp(2.2rem,3.6vw,4.2rem)}
-  .game-boggle .boggle-wordbar{align-self:start;gap:18px}
+  .game-boggle .boggle-wordbar{grid-row:2;align-self:start;gap:18px}
   .game-boggle .boggle-wordbar>strong{min-height:58px;font-size:34px}
+  .game-boggle .history-panel{grid-column:2;grid-row:3;align-self:start;min-height:0}
+  .game-boggle .chain-list{max-height:clamp(160px,36vh,360px)}
+
+  .game-wordchain .prompt-card{grid-row:4/span 2}
+  .game-wordchain .game-form{grid-row:4}
+  .game-wordchain .history-panel{grid-column:2;grid-row:5;align-self:start;min-height:0}
+
+  .game-wordshrink .puzzle-card{grid-row:3/span 2}
+  .game-wordshrink .game-form{grid-row:3}
+  .game-wordshrink .history-panel{grid-column:2;grid-row:4;align-self:start;min-height:0}
+
+  .game-spellingbee .prompt-card,.game-wordladder .prompt-card,.game-categoryrush .prompt-card,.game-anagrambattle .prompt-card,.game-rhymetime .prompt-card{grid-row:2/span 2}
+  .game-spellingbee .game-form,.game-wordladder .game-form,.game-categoryrush .game-form,.game-anagrambattle .game-form,.game-rhymetime .game-form{grid-row:2}
+  .game-spellingbee .found-words,.game-wordladder .chain-list,.game-categoryrush .chain-list,.game-anagrambattle .found-words,.game-rhymetime .found-words{grid-column:2;grid-row:3;align-self:start;min-height:0}
 
   .game-crossclue .crossclue-panel,.game-crossworddaily .crossclue-panel{grid-template-columns:minmax(560px,680px) minmax(420px,1fr);justify-content:center}
   .game-crossclue .crossword-grid,.game-crossworddaily .crossword-grid{gap:4px}
