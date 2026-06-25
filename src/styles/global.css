@@ -142,6 +142,15 @@ input[type='text'],input[type='email']{width:100%;min-height:48px;padding:12px 1
   .word-search-cell{border-radius:12px;font-size:clamp(1.6rem,2.4vw,2.8rem)}
   .game-wordsearch .word-search-actions{align-self:start}
   .game-wordsearch .game-content{max-width:520px;align-items:center;padding:18px 16px 32px}
+  .game-wordsearch .level-select-panel{width:100%;max-width:520px;gap:16px;padding:20px 16px}
+  .game-wordsearch .level-select-panel h1{font-size:clamp(1.8rem,8vw,3rem);line-height:1.08}
+  .game-wordsearch .level-select-summary{grid-template-columns:1fr 1fr;gap:10px}
+  .game-wordsearch .level-select-summary span{padding:12px}
+  .game-wordsearch .level-select-summary strong{font-size:20px}
+  .game-wordsearch .level-map{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .game-wordsearch .level-node{min-height:78px;padding:8px}
+  .game-wordsearch .level-node span{font-size:21px}
+  .game-wordsearch .level-node small{font-size:11px}
   .game-wordsearch .game-panel{display:flex;width:100%;flex-direction:column;align-items:center;gap:16px;margin:0}
   .game-wordsearch .score-bar{min-height:64px;gap:22px;padding:10px 16px}
   .game-wordsearch .score-bar small{font-size:13px}
