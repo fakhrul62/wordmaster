@@ -3,6 +3,7 @@ import { GAME_CATALOG, GAME_KEYS, getGameMeta } from '../data/gameCatalog'
 const DAY_MS = 24 * 60 * 60 * 1000
 const PLAYER_LEVEL_XP = 140
 const MAX_VISIBLE_LEVELS = 12
+export const BOGGLE_MODES = [3, 4, 5, 6]
 
 const TITLE_TIERS = [
   { id: 'beginner_explorer', title: 'Beginner Explorer', xp: 0 },
@@ -154,7 +155,7 @@ function seededIndex(seed, length, offset = 0) {
   return (seed + offset * 37) % length
 }
 
-export function createGameProgress(existing = {}) {
+function createModeProgress(existing = {}) {
   return {
     level: Math.max(1, Number(existing.level) || 1),
     highScore: Math.max(0, Number(existing.highScore) || 0),
@@ -164,8 +165,30 @@ export function createGameProgress(existing = {}) {
   }
 }
 
+export function createGameProgress(existing = {}, gameKey = '') {
+  const base = createModeProgress(existing)
+  if (gameKey !== 'boggle') return base
+  const selectedMode = BOGGLE_MODES.includes(Number(existing.selectedMode)) ? Number(existing.selectedMode) : null
+  const migrationMode = selectedMode || 3
+  return {
+    ...base,
+    selectedMode,
+    modes: Object.fromEntries(BOGGLE_MODES.map((mode) => [
+      mode,
+      createModeProgress(existing.modes?.[mode] || (mode === migrationMode ? existing : {})),
+    ])),
+  }
+}
+
 export const createGames = (existingGames = {}) =>
-  Object.fromEntries(GAME_KEYS.map((key) => [key, createGameProgress(existingGames[key])]))
+  Object.fromEntries(GAME_KEYS.map((key) => [key, createGameProgress(existingGames[key], key)]))
+
+export function getGameTrack(gameProgress, gameKey, mode = null) {
+  if (gameKey === 'boggle' && mode) {
+    return gameProgress?.modes?.[mode] || createModeProgress()
+  }
+  return gameProgress || createModeProgress()
+}
 
 export function getPlayerLevel(totalXP = 0) {
   const level = Math.floor(totalXP / PLAYER_LEVEL_XP) + 1
@@ -410,11 +433,36 @@ function updateEvent(player, gameKey, score, didClear) {
   }
 }
 
-export function applyProgressUpdate(current, gameKey, { score = 0, levelReached = 1, xpEarned = 0 }) {
-  const currentGame = current.games[gameKey] || createGameProgress()
-  const didClear = levelReached > currentGame.level || score > 0
+export function applyProgressUpdate(current, gameKey, { score = 0, levelReached = 1, xpEarned = 0, mode = null }) {
+  const trackMode = gameKey === 'boggle' && BOGGLE_MODES.includes(Number(mode)) ? Number(mode) : null
+  const currentGame = current.games[gameKey] || createGameProgress({}, gameKey)
+  const currentTrack = getGameTrack(currentGame, gameKey, trackMode)
+  const didClear = levelReached > currentTrack.level || score > 0
   const completedLevel = Math.max(1, levelReached - 1)
-  const completedLevels = [...new Set([...currentGame.completedLevels, completedLevel])].sort((a, b) => a - b)
+  const completedLevels = [...new Set([...currentTrack.completedLevels, completedLevel])].sort((a, b) => a - b)
+  const nextTrack = {
+    ...currentTrack,
+    level: Math.max(currentTrack.level, levelReached),
+    highScore: Math.max(currentTrack.highScore, score),
+    xp: currentTrack.xp + xpEarned,
+    clears: currentTrack.clears + (didClear ? 1 : 0),
+    completedLevels,
+  }
+  const nextGame = gameKey === 'boggle' && trackMode
+    ? {
+        ...currentGame,
+        selectedMode: trackMode,
+        modes: {
+          ...currentGame.modes,
+          [trackMode]: nextTrack,
+        },
+        level: Math.max(...BOGGLE_MODES.map((item) =>
+          item === trackMode ? nextTrack.level : getGameTrack(currentGame, gameKey, item).level)),
+        highScore: Math.max(currentGame.highScore || 0, score),
+        xp: (currentGame.xp || 0) + xpEarned,
+        clears: (currentGame.clears || 0) + (didClear ? 1 : 0),
+      }
+    : nextTrack
   let nextPlayer = {
     ...current,
     totalXP: current.totalXP + xpEarned,
@@ -423,14 +471,7 @@ export function applyProgressUpdate(current, gameKey, { score = 0, levelReached 
     lastPlayed: todayKey(),
     games: {
       ...current.games,
-      [gameKey]: {
-        ...currentGame,
-        level: Math.max(currentGame.level, levelReached),
-        highScore: Math.max(currentGame.highScore, score),
-        xp: currentGame.xp + xpEarned,
-        clears: currentGame.clears + (didClear ? 1 : 0),
-        completedLevels,
-      },
+      [gameKey]: nextGame,
     },
   }
 
@@ -491,7 +532,7 @@ export function getLevelMap(unlockedLevel = 1) {
 export function getUpcomingMilestones(player) {
   const playerLevel = getPlayerLevel(player.totalXP)
   const nearestGame = GAME_CATALOG
-    .map((game) => ({ game, level: player.games[game.key]?.level || 1 }))
+    .map((game) => ({ game, level: getGameTrack(player.games[game.key], game.key, player.games[game.key]?.selectedMode).level }))
     .sort((a, b) => a.level - b.level)[0]
   const lockedAchievement = ACHIEVEMENTS.find((achievement) => !player.achievements.includes(achievement.id))
   return [

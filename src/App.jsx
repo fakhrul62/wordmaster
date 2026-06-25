@@ -5,6 +5,7 @@ import SettingsScreen from './components/SettingsScreen'
 import Toast from './components/Toast'
 import UserSetup from './components/UserSetup'
 import { usePlayerData } from './hooks/usePlayerData'
+import { getGameTrack } from './utils/progression'
 
 const DEFAULT_THEME = { mode: 'dark', color: 'violet' }
 const ROUTE_STORAGE_KEY = 'wordmaster_route'
@@ -47,7 +48,7 @@ function App() {
   const [toast, setToast] = useState(null)
   const [themeSettings, setThemeSettings] = useState(readThemeSettings)
   const {
-    player, selectPlayer, saveProgress, connectAccount, switchPlayer, getLeaderboard,
+    player, selectPlayer, saveProgress, selectGameMode, connectAccount, switchPlayer, getLeaderboard,
     syncStatus, syncError, storageWarning,
   } = usePlayerData()
 
@@ -90,6 +91,10 @@ function App() {
     navigate(fallbackScreen, null, { replace: true })
   }
 
+  function goHome() {
+    navigate('home', null, { replace: true })
+  }
+
   useEffect(() => {
     if (!toast) return undefined
     const timer = window.setTimeout(() => setToast(null), 2600)
@@ -121,9 +126,19 @@ function App() {
     }
   }, [themeSettings])
 
-  function handleGameComplete(gameKey, score, xpEarned, nextLevel) {
-    saveProgress(gameKey, { score, levelReached: nextLevel, xpEarned })
-    navigate('game', { gameKey, level: nextLevel }, { replace: true })
+  function routeForGame(gameKey, mode = null) {
+    const progress = player.games[gameKey]
+    const selectedMode = gameKey === 'boggle' && (mode || progress.selectedMode)
+      ? Number(mode || progress.selectedMode)
+      : null
+    const track = getGameTrack(progress, gameKey, selectedMode)
+    return { gameKey, level: track.level, mode: selectedMode }
+  }
+
+  function handleGameComplete(gameKey, score, xpEarned, nextLevel, options = {}) {
+    const mode = options.mode ? Number(options.mode) : null
+    saveProgress(gameKey, { score, levelReached: nextLevel, xpEarned, mode })
+    navigate('game', { gameKey, level: nextLevel, mode }, { replace: true })
   }
 
   return (
@@ -136,7 +151,7 @@ function App() {
           player={player}
           getLeaderboard={getLeaderboard}
           onPlayGame={(gameKey) => {
-            navigate('game', { gameKey, level: player.games[gameKey].level })
+            navigate('game', routeForGame(gameKey))
           }}
           onSwitchPlayer={() => { switchPlayer(); navigate('setup') }}
         />
@@ -159,10 +174,20 @@ function App() {
         <GameWrapper
           gameKey={gameParams.gameKey}
           level={gameParams.level}
-          unlockedLevel={Math.max(player?.games?.[gameParams.gameKey]?.level || 1, gameParams.level)}
+          mode={gameParams.mode}
+          gameProgress={player.games[gameParams.gameKey]}
+          unlockedLevel={Math.max(
+            getGameTrack(player.games[gameParams.gameKey], gameParams.gameKey, gameParams.mode).level,
+            gameParams.level,
+          )}
           onBack={() => goBack('home')}
-          onComplete={(score, xpEarned, nextLevel) =>
-            handleGameComplete(gameParams.gameKey, score, xpEarned, nextLevel)}
+          onHome={goHome}
+          onModeSelect={(mode, modeLevel) => {
+            selectGameMode(gameParams.gameKey, mode)
+            navigate('game', { gameKey: gameParams.gameKey, level: modeLevel, mode }, { replace: true })
+          }}
+          onComplete={(score, xpEarned, nextLevel, options) =>
+            handleGameComplete(gameParams.gameKey, score, xpEarned, nextLevel, options)}
           showToast={showToast}
         />
       )}

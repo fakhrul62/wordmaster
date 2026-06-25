@@ -3,6 +3,7 @@
 WordMaster now keeps long-term engagement state at the player profile level.
 
 - Every mini-game owns an independent level track and high score.
+- Boggle splits progression into separate 3+, 4+, 5+, and 6+ minimum-word tracks.
 - Daily login streaks award coins, XP, and points.
 - Daily challenges rotate from the game catalog and reward coins, XP, and points.
 - Special events rotate twice per month with limited missions and event currency.

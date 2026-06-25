@@ -2,7 +2,9 @@ import LevelBadge from './LevelBadge'
 import { GAME_CATALOG } from '../data/gameCatalog'
 import {
   ACHIEVEMENTS,
+  BOGGLE_MODES,
   getEventProgress,
+  getGameTrack,
   getPlayerLevel,
   getTitleForXP,
   getUpcomingMilestones,
@@ -132,19 +134,29 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
           <div className="game-grid">
             {GAME_CATALOG.map((game, index) => {
               const progress = player.games[game.key] || { level: 1, highScore: 0, xp: 0, clears: 0 }
-              const nextReward = progress.level * 10
+              const selectedMode = game.key === 'boggle' ? progress.selectedMode || 3 : null
+              const displayProgress = getGameTrack(progress, game.key, selectedMode)
+              const nextReward = displayProgress.level * 10
               return (
                 <article className={`game-card card-${game.color}`} style={{ animationDelay: `${index * 70}ms` }} key={game.key}>
                   <div className="game-card-header">
                     <span className="game-card-icon" aria-hidden="true">{game.icon}</span>
-                    <LevelBadge level={progress.level} />
+                    <LevelBadge level={displayProgress.level} />
                   </div>
                   <div>
                     <h2>{game.name}</h2>
                     <p className="game-card-desc">{game.desc}</p>
                   </div>
+                  {game.key === 'boggle' && (
+                    <div className="boggle-track-summary" aria-label="Boggle mode levels">
+                      {BOGGLE_MODES.map((mode) => {
+                        const track = getGameTrack(progress, game.key, mode)
+                        return <span className={selectedMode === mode ? 'selected' : ''} key={mode}>{mode}+ LV {track.level}</span>
+                      })}
+                    </div>
+                  )}
                   <div className="card-stat">
-                    <span>Best {progress.highScore}</span>
+                    <span>{game.key === 'boggle' ? `${selectedMode}+ best` : 'Best'} {displayProgress.highScore}</span>
                     <strong>+{nextReward} XP</strong>
                   </div>
                   <button className="btn-primary" onClick={() => onPlayGame(game.key)}>PLAY</button>

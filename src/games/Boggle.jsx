@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
 
-const LENGTHS = [3, 4, 5, 6]
 const BOARD_SIZE = 4
 const GAME_TIME = 120
 const LETTERS = 'eeeeeeeeeeeeaaaaaaaaaiiiiiiiiioooooooonnnnnnrrrrrrttttttllllssssuuuuddggbbccmmppffhhvvwwyykjxqz'
@@ -28,9 +27,9 @@ async function isDictionaryWord(word) {
   return response.ok
 }
 
-function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
-  const [minimumLength, setMinimumLength] = useState(null)
-  const [board, setBoard] = useState([])
+function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnabled = true }) {
+  const modeLength = Number(minimumLength) || 3
+  const [board, setBoard] = useState(() => makeBoard())
   const [path, setPath] = useState([])
   const [found, setFound] = useState([])
   const [timeLeft, setTimeLeft] = useState(GAME_TIME)
@@ -43,24 +42,14 @@ function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
   const score = found.reduce((total, word) => total + scoreWord(word), 0)
   const targetScore = 10 + (level - 1) * 5
 
-  function start(length) {
-    setMinimumLength(length)
+  const reset = useCallback(() => {
     setBoard(makeBoard())
     setPath([])
     setFound([])
     setTimeLeft(GAME_TIME)
     setExpired(false)
     setValidating(false)
-  }
-
-  function reset() {
-    setMinimumLength(null)
-    setBoard([])
-    setPath([])
-    setFound([])
-    setTimeLeft(GAME_TIME)
-    setExpired(false)
-  }
+  }, [])
 
   function selectTile(tile, allowToggle = true) {
     if (expired) return
@@ -85,9 +74,9 @@ function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
   async function submit() {
     const word = currentWord.toLowerCase()
     if (expired || validating || !word) return
-    if (word.length < minimumLength) {
+    if (word.length < modeLength) {
       setPath([])
-      showToast(`Minimum length is ${minimumLength}.`, 'error')
+      showToast(`Minimum length is ${modeLength}.`, 'error')
       return
     }
     if (found.includes(word)) {
@@ -120,7 +109,11 @@ function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
   }
 
   useEffect(() => {
-    if (!minimumLength || expired) return undefined
+    reset()
+  }, [level, modeLength, reset])
+
+  useEffect(() => {
+    if (expired) return undefined
     const timer = window.setInterval(() => {
       setTimeLeft((time) => {
         if (time > 1) return time - 1
@@ -130,28 +123,12 @@ function Boggle({ level, onComplete, showToast, hapticsEnabled = true }) {
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [expired, minimumLength])
-
-  if (!minimumLength) {
-    return (
-      <div className="game-panel">
-        <section className="choice-panel">
-          <p className="eyebrow">Boggle</p>
-          <h1>Pick minimum length</h1>
-          <div className="length-options">
-            {LENGTHS.map((length) => (
-              <button className="btn-secondary" key={length} onClick={() => start(length)}>{length}</button>
-            ))}
-          </div>
-        </section>
-      </div>
-    )
-  }
+  }, [expired])
 
   return (
     <div className="game-panel">
       <div className="status-row">
-        <span className="neutral-status">Min {minimumLength}</span>
+        <span className="neutral-status">Min {modeLength}</span>
         <strong>{Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</strong>
         <span>{score}/{targetScore} pts</span>
       </div>

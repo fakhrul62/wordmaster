@@ -1,8 +1,8 @@
 import LevelBadge from './LevelBadge'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readHapticsPreference, triggerHaptic, writeHapticsPreference } from '../utils/haptics'
 import { GAME_NAMES } from '../data/gameCatalog'
-import { getLevelMap } from '../utils/progression'
+import { BOGGLE_MODES, getGameTrack, getLevelMap } from '../utils/progression'
 import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
 import CrossClue from '../games/CrossClue'
@@ -73,22 +73,50 @@ function spawnConfetti() {
   }
 }
 
-function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete, showToast }) {
+function GameWrapper({
+  gameKey,
+  level,
+  mode = null,
+  gameProgress = null,
+  unlockedLevel = level,
+  onBack,
+  onHome,
+  onModeSelect,
+  onComplete,
+  showToast,
+}) {
   const [result, setResult] = useState(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [hapticsEnabled, setHapticsEnabled] = useState(readHapticsPreference)
   const [selectedLevel, setSelectedLevel] = useState(level)
+  const [selectedMode, setSelectedMode] = useState(Number(mode || gameProgress?.selectedMode || 3))
   const [levelSelectionOpen, setLevelSelectionOpen] = useState(true)
   const [rulesAccepted, setRulesAccepted] = useState(false)
+  const previousGameKey = useRef(gameKey)
   const Game = GAME_COMPONENTS[gameKey]
   const rules = GAME_RULES[gameKey]
-  const visibleLevels = getLevelMap(unlockedLevel)
+  const activeTrack = getGameTrack(gameProgress, gameKey, gameKey === 'boggle' ? selectedMode : null)
+  const activeUnlockedLevel = gameKey === 'boggle' ? Math.max(activeTrack.level, selectedLevel) : unlockedLevel
+  const visibleLevels = getLevelMap(activeUnlockedLevel)
 
   useEffect(() => {
+    if (previousGameKey.current === gameKey) return
+    previousGameKey.current = gameKey
+    const nextMode = Number(mode || gameProgress?.selectedMode || 3)
+    setSelectedMode(nextMode)
     setSelectedLevel(level)
     setLevelSelectionOpen(true)
     setRulesAccepted(false)
-  }, [gameKey, level])
+  }, [gameKey, gameProgress, level, mode])
+
+  useEffect(() => {
+    if (gameKey !== 'boggle' || !mode) return
+    setSelectedMode(Number(mode))
+  }, [gameKey, mode])
+
+  useEffect(() => {
+    setSelectedLevel(level)
+  }, [level])
 
   function toggleHaptics() {
     setHapticsEnabled((enabled) => {
@@ -104,19 +132,30 @@ function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete
   }
 
   function finish(score, xp, nextLevel) {
-    onComplete(score, xp, nextLevel)
+    onComplete(score, xp, nextLevel, { mode: gameKey === 'boggle' ? selectedMode : null })
+    setSelectedLevel(nextLevel)
+    setLevelSelectionOpen(false)
+    setRulesAccepted(true)
     setResult({ score, xp, nextLevel })
     spawnConfetti()
   }
 
   function chooseLevel(nextLevel) {
-    if (nextLevel > unlockedLevel) return
+    if (nextLevel > activeUnlockedLevel) return
     setSelectedLevel(nextLevel)
   }
 
+  function chooseMode(nextMode) {
+    const normalizedMode = Number(nextMode)
+    const track = getGameTrack(gameProgress, gameKey, normalizedMode)
+    setSelectedMode(normalizedMode)
+    setSelectedLevel(track.level)
+    onModeSelect?.(normalizedMode, track.level)
+  }
+
   function startSelectedLevel() {
+    if (gameKey === 'boggle') onModeSelect?.(selectedMode, selectedLevel)
     setLevelSelectionOpen(false)
-    setRulesAccepted(false)
   }
 
   return (
@@ -125,6 +164,7 @@ function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete
         <button className="back-button" onClick={leaveGame}>← Back</button>
         <h1 className="game-topbar-title">{GAME_NAMES[gameKey]}</h1>
         <div className="game-topbar-actions">
+          <button className="home-icon-button" onClick={onHome} aria-label="Go home">⌂</button>
           <button
             className={`haptic-toggle ${hapticsEnabled ? 'enabled' : ''}`}
             onClick={toggleHaptics}
@@ -141,9 +181,26 @@ function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete
           <section className="level-select-panel" aria-labelledby="level-select-title">
             <p className="eyebrow">Level progression</p>
             <h1 id="level-select-title">{GAME_NAMES[gameKey]}</h1>
+            {gameKey === 'boggle' && (
+              <div className="boggle-mode-selector" aria-label="Boggle minimum word length">
+                {BOGGLE_MODES.map((item) => {
+                  const track = getGameTrack(gameProgress, gameKey, item)
+                  return (
+                    <button
+                      className={selectedMode === item ? 'selected' : ''}
+                      key={item}
+                      onClick={() => chooseMode(item)}
+                    >
+                      <strong>{item}</strong>
+                      <small>LV {track.level}</small>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             <div className="level-select-summary">
-              <span><small>Current</small><strong>LV {unlockedLevel}</strong></span>
-              <span><small>Next unlock</small><strong>LV {unlockedLevel + 1}</strong></span>
+              <span><small>{gameKey === 'boggle' ? `${selectedMode}+ track` : 'Current'}</small><strong>LV {activeUnlockedLevel}</strong></span>
+              <span><small>Next unlock</small><strong>LV {activeUnlockedLevel + 1}</strong></span>
             </div>
             <div className="level-map" aria-label="Level selection">
               {visibleLevels.map((entry) => (
@@ -179,6 +236,7 @@ function GameWrapper({ gameKey, level, unlockedLevel = level, onBack, onComplete
           <Game
             key={`${gameKey}-${selectedLevel}`}
             level={selectedLevel}
+            minimumLength={gameKey === 'boggle' ? selectedMode : undefined}
             onComplete={finish}
             showToast={showToast}
             hapticsEnabled={hapticsEnabled}

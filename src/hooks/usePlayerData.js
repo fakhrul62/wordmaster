@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   applyProgressUpdate,
   buildLeaderboard,
+  BOGGLE_MODES,
+  createGameProgress,
   createGames,
   getTitleForXP,
   refreshDailyEngagement,
@@ -203,10 +205,47 @@ export function usePlayerData() {
     return synced
   }, [player])
 
-  const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned }) => {
+  const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned, mode }) => {
     setPlayer((current) => {
       if (!current) return current
-      const next = applyProgressUpdate(current, gameKey, { score, levelReached, xpEarned })
+      const next = applyProgressUpdate(current, gameKey, { score, levelReached, xpEarned, mode })
+      try {
+        writeCurrentPlayer(next)
+      } catch {
+        setStorageWarning(true)
+      }
+      if (next.accountEmail) {
+        setSyncStatus('syncing')
+        syncAccount(next.accountEmail, next)
+          .then((synced) => {
+            setPlayer(synced)
+            setSyncStatus('synced')
+            writeCurrentPlayer(synced)
+          })
+          .catch((error) => {
+            setSyncStatus('error')
+            setSyncError(error.message)
+          })
+      }
+      return next
+    })
+  }, [])
+
+  const selectGameMode = useCallback((gameKey, mode) => {
+    if (gameKey !== 'boggle' || !BOGGLE_MODES.includes(Number(mode))) return
+    setPlayer((current) => {
+      if (!current) return current
+      const currentGame = current.games[gameKey] || createGameProgress({}, gameKey)
+      const next = {
+        ...current,
+        games: {
+          ...current.games,
+          [gameKey]: {
+            ...currentGame,
+            selectedMode: Number(mode),
+          },
+        },
+      }
       try {
         writeCurrentPlayer(next)
       } catch {
@@ -253,6 +292,7 @@ export function usePlayerData() {
     player,
     selectPlayer,
     saveProgress,
+    selectGameMode,
     connectAccount,
     switchPlayer,
     getLeaderboard,

@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb'
 
 const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock', 'wordle', 'boggle']
+const BOGGLE_MODES = [3, 4, 5, 6]
 
 let clientPromise
 
@@ -15,21 +16,34 @@ function getClient() {
   return clientPromise
 }
 
+function createModeProgress(existing = {}) {
+  return {
+    level: Math.max(1, Number(existing.level) || 1),
+    highScore: Math.max(0, Number(existing.highScore) || 0),
+    xp: Math.max(0, Number(existing.xp) || 0),
+    clears: Math.max(0, Number(existing.clears) || 0),
+    completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
+  }
+}
+
+function createGameProgress(existing = {}, key = '') {
+  const base = createModeProgress(existing)
+  if (key !== 'boggle') return base
+  const selectedMode = BOGGLE_MODES.includes(Number(existing.selectedMode)) ? Number(existing.selectedMode) : null
+  const migrationMode = selectedMode || 3
+  return {
+    ...base,
+    selectedMode,
+    modes: Object.fromEntries(BOGGLE_MODES.map((mode) => [
+      mode,
+      createModeProgress(existing.modes?.[mode] || (mode === migrationMode ? existing : {})),
+    ])),
+  }
+}
+
 function createGames(existingGames = {}) {
   return Object.fromEntries(
-    GAME_KEYS.map((key) => {
-      const existing = existingGames[key] || {}
-      return [
-        key,
-        {
-          level: Math.max(1, Number(existing.level) || 1),
-          highScore: Math.max(0, Number(existing.highScore) || 0),
-          xp: Math.max(0, Number(existing.xp) || 0),
-          clears: Math.max(0, Number(existing.clears) || 0),
-          completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
-        },
-      ]
-    }),
+    GAME_KEYS.map((key) => [key, createGameProgress(existingGames[key], key)]),
   )
 }
 
@@ -87,6 +101,32 @@ function mergePlayers(localPlayer, remotePlayer, email) {
   const games = createGames()
 
   GAME_KEYS.forEach((key) => {
+    if (key === 'boggle') {
+      const modes = Object.fromEntries(BOGGLE_MODES.map((mode) => {
+        const localMode = local.games[key].modes[mode]
+        const remoteMode = remote.games[key].modes[mode]
+        return [mode, {
+          level: Math.max(localMode.level, remoteMode.level),
+          highScore: Math.max(localMode.highScore, remoteMode.highScore),
+          xp: Math.max(localMode.xp, remoteMode.xp),
+          clears: Math.max(localMode.clears, remoteMode.clears),
+          completedLevels: [...new Set([
+            ...localMode.completedLevels,
+            ...remoteMode.completedLevels,
+          ])].sort((a, b) => a - b),
+        }]
+      }))
+      games[key] = {
+        ...local.games[key],
+        selectedMode: local.games[key].selectedMode || remote.games[key].selectedMode,
+        modes,
+        level: Math.max(...BOGGLE_MODES.map((mode) => modes[mode].level)),
+        highScore: Math.max(...BOGGLE_MODES.map((mode) => modes[mode].highScore)),
+        xp: Math.max(local.games[key].xp, remote.games[key].xp),
+        clears: Math.max(local.games[key].clears, remote.games[key].clears),
+      }
+      return
+    }
     games[key] = {
       level: Math.max(local.games[key].level, remote.games[key].level),
       highScore: Math.max(local.games[key].highScore, remote.games[key].highScore),
