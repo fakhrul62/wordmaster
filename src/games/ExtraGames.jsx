@@ -156,6 +156,7 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   const [selected, setSelected] = useState([])
   const [found, setFound] = useState([])
   const [foundPaths, setFoundPaths] = useState({})
+  const [hintCursor, setHintCursor] = useState(0)
   const score = scoreFor(found)
 
   function isAdjacent(previousCell, nextCell) {
@@ -203,10 +204,12 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   }
 
   function useHint() {
-    const hintWord = puzzle.words.find((word) => !found.includes(word))
+    const hintOptions = puzzle.words.filter((word) => !found.includes(word))
+    const hintWord = hintOptions[hintCursor % Math.max(1, hintOptions.length)]
     if (!hintWord) return showToast('No hints left on this board.', 'info')
     triggerHaptic(hapticsEnabled)
     setSelected([puzzle.placements[hintWord][0]])
+    setHintCursor((cursor) => cursor + 1)
     showToast('Start from the highlighted tile.', 'info')
   }
 
