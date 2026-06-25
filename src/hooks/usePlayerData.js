@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  applyProgressUpdate,
+  buildLeaderboard,
+  createGames,
+  getTitleForXP,
+  refreshDailyEngagement,
+  todayKey,
+} from '../utils/progression'
 import { normalizeUsername } from '../utils/wordUtils'
 
-const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock', 'wordle', 'boggle']
 const GUEST_NAME = 'Guest'
-
-const createGames = (existingGames = {}) =>
-  Object.fromEntries(
-    GAME_KEYS.map((key) => [key, { level: 1, highScore: 0, xp: 0, ...existingGames[key] }]),
-  )
 
 function createPlayer(username = GUEST_NAME, accountEmail = '') {
   return {
@@ -15,8 +17,25 @@ function createPlayer(username = GUEST_NAME, accountEmail = '') {
     accountEmail,
     isGuest: !accountEmail,
     totalXP: 0,
+    totalPoints: 0,
+    coins: 0,
     gamesPlayed: 0,
-    lastPlayed: new Date().toISOString().slice(0, 10),
+    dailyChallengesCompleted: 0,
+    eventMissionsCompleted: 0,
+    achievements: [],
+    titles: ['Beginner Explorer'],
+    activeTitle: 'Beginner Explorer',
+    recentUnlocks: [],
+    daily: null,
+    events: {},
+    streak: {
+      count: 0,
+      best: 0,
+      lastLogin: '',
+      reward: { coins: 0, xp: 0, points: 0 },
+    },
+    lastLogin: '',
+    lastPlayed: todayKey(),
     games: createGames(),
   }
 }
@@ -33,12 +52,37 @@ function localKeyForPlayer(player) {
 }
 
 function normalizePlayer(player, fallbackUsername = GUEST_NAME, accountEmail = '') {
+  const base = createPlayer(fallbackUsername, accountEmail)
+  const totalXP = Math.max(0, Number(player?.totalXP) || 0)
+  const titles = Array.isArray(player?.titles) && player.titles.length
+    ? player.titles
+    : [getTitleForXP(totalXP)]
   return {
-    ...createPlayer(fallbackUsername, accountEmail),
+    ...base,
     ...player,
     username: String(player?.username || fallbackUsername || GUEST_NAME).trim(),
     accountEmail: normalizeEmail(player?.accountEmail || accountEmail),
     isGuest: !normalizeEmail(player?.accountEmail || accountEmail),
+    totalXP,
+    totalPoints: Math.max(0, Number(player?.totalPoints) || Number(player?.totalXP) || 0),
+    coins: Math.max(0, Number(player?.coins) || 0),
+    gamesPlayed: Math.max(0, Number(player?.gamesPlayed) || 0),
+    dailyChallengesCompleted: Math.max(0, Number(player?.dailyChallengesCompleted) || 0),
+    eventMissionsCompleted: Math.max(0, Number(player?.eventMissionsCompleted) || 0),
+    achievements: Array.isArray(player?.achievements) ? player.achievements : [],
+    titles,
+    activeTitle: player?.activeTitle || titles.at(-1) || getTitleForXP(totalXP),
+    recentUnlocks: Array.isArray(player?.recentUnlocks) ? player.recentUnlocks.slice(0, 8) : [],
+    daily: player?.daily || null,
+    events: player?.events && typeof player.events === 'object' ? player.events : {},
+    streak: {
+      ...base.streak,
+      ...(player?.streak || {}),
+      count: Math.max(0, Number(player?.streak?.count) || 0),
+      best: Math.max(0, Number(player?.streak?.best) || Number(player?.streak?.count) || 0),
+    },
+    lastLogin: player?.lastLogin || player?.streak?.lastLogin || '',
+    lastPlayed: player?.lastPlayed || todayKey(),
     games: createGames(player?.games),
   }
 }
@@ -80,7 +124,13 @@ async function syncAccount(email, player) {
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || 'Account sync failed.')
-  return normalizePlayer(payload.player, email.split('@')[0], email)
+  return refreshDailyEngagement(normalizePlayer(payload.player, email.split('@')[0], email))
+}
+
+function readStoredPlayers() {
+  return Object.keys(localStorage)
+    .filter((key) => key.startsWith('wordmaster_player_') || key.startsWith('wordmaster_account_'))
+    .map((key) => normalizePlayer(JSON.parse(localStorage.getItem(key))))
 }
 
 export function usePlayerData() {
@@ -93,10 +143,12 @@ export function usePlayerData() {
     try {
       const storedPlayer = readCurrentPlayer()
       if (storedPlayer) {
-        setPlayer(storedPlayer)
-        setSyncStatus(storedPlayer.accountEmail ? 'syncing' : 'local')
-        if (storedPlayer.accountEmail) {
-          syncAccount(storedPlayer.accountEmail, storedPlayer)
+        const refreshedPlayer = refreshDailyEngagement(storedPlayer)
+        setPlayer(refreshedPlayer)
+        writeCurrentPlayer(refreshedPlayer)
+        setSyncStatus(refreshedPlayer.accountEmail ? 'syncing' : 'local')
+        if (refreshedPlayer.accountEmail) {
+          syncAccount(refreshedPlayer.accountEmail, refreshedPlayer)
             .then((synced) => {
               setPlayer(synced)
               setSyncStatus('synced')
@@ -108,7 +160,7 @@ export function usePlayerData() {
             })
         }
       } else {
-        const guest = createPlayer()
+        const guest = refreshDailyEngagement(createPlayer())
         setPlayer(guest)
         writeCurrentPlayer(guest)
       }
@@ -118,7 +170,7 @@ export function usePlayerData() {
   }, [])
 
   const selectPlayer = useCallback((username = GUEST_NAME) => {
-    const nextPlayer = readPlayer(username)
+    const nextPlayer = refreshDailyEngagement(readPlayer(username))
     setPlayer(nextPlayer)
     setSyncStatus('local')
     try {
@@ -133,7 +185,11 @@ export function usePlayerData() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       throw new Error('Enter a valid email address.')
     }
-    const localPlayer = normalizePlayer(player || createPlayer(), player?.username || normalizedEmail.split('@')[0], normalizedEmail)
+    const localPlayer = refreshDailyEngagement(normalizePlayer(
+      player || createPlayer(),
+      player?.username || normalizedEmail.split('@')[0],
+      normalizedEmail,
+    ))
     setSyncStatus('syncing')
     setSyncError('')
     const synced = await syncAccount(normalizedEmail, localPlayer)
@@ -150,21 +206,7 @@ export function usePlayerData() {
   const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned }) => {
     setPlayer((current) => {
       if (!current) return current
-      const currentGame = current.games[gameKey] || { level: 1, highScore: 0, xp: 0 }
-      const next = {
-        ...current,
-        totalXP: current.totalXP + xpEarned,
-        gamesPlayed: current.gamesPlayed + 1,
-        lastPlayed: new Date().toISOString().slice(0, 10),
-        games: {
-          ...current.games,
-          [gameKey]: {
-            level: Math.max(currentGame.level, levelReached),
-            highScore: Math.max(currentGame.highScore, score),
-            xp: currentGame.xp + xpEarned,
-          },
-        },
-      }
+      const next = applyProgressUpdate(current, gameKey, { score, levelReached, xpEarned })
       try {
         writeCurrentPlayer(next)
       } catch {
@@ -200,20 +242,10 @@ export function usePlayerData() {
 
   const getLeaderboard = useCallback(() => {
     try {
-      return Object.keys(localStorage)
-        .filter((key) => key.startsWith('wordmaster_player_'))
-        .map((key) => JSON.parse(localStorage.getItem(key)))
-        .concat(
-          Object.keys(localStorage)
-            .filter((key) => key.startsWith('wordmaster_account_'))
-            .map((key) => JSON.parse(localStorage.getItem(key))),
-        )
-        .filter(Boolean)
-        .sort((a, b) => b.totalXP - a.totalXP)
-        .slice(0, 10)
+      return buildLeaderboard(readStoredPlayers(), player)
     } catch {
       setStorageWarning(true)
-      return player ? [player] : []
+      return buildLeaderboard(player ? [player] : [], player)
     }
   }, [player])
 
