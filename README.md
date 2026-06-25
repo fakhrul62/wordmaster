@@ -9,6 +9,21 @@ WordMaster is a free, mobile-first collection of browser word games:
 - LetterLock
 - Wordle
 - Boggle
+- Word Search
+- Typing Sprint
+- Spelling Bee
+- Word Ladder
+- Definition Duel
+- Missing Letter
+- Synonym Match
+- Category Rush
+- Word Sort
+- Cipher Words
+- Crossword Daily
+- Quote Fill
+- Anagram Battle
+- Word Maze
+- Rhyme Time
 
 Progress, daily streaks, daily challenges, achievements, titles, coins, XP, points, and local leaderboard data are stored per player in `localStorage`. Optional account sync is available through the `/api/player` endpoint when MongoDB environment variables are configured.
 

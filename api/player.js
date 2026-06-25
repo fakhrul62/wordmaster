@@ -1,6 +1,29 @@
 import { MongoClient } from 'mongodb'
 
-const GAME_KEYS = ['wordchain', 'anagramvault', 'crossclue', 'wordshrink', 'letterlock', 'wordle', 'boggle']
+const GAME_KEYS = [
+  'wordchain',
+  'anagramvault',
+  'crossclue',
+  'wordshrink',
+  'letterlock',
+  'wordle',
+  'boggle',
+  'wordsearch',
+  'typingsprint',
+  'spellingbee',
+  'wordladder',
+  'definitionduel',
+  'missingletter',
+  'synonymmatch',
+  'categoryrush',
+  'wordsort',
+  'cipherwords',
+  'crossworddaily',
+  'quotefill',
+  'anagrambattle',
+  'wordmaze',
+  'rhymetime',
+]
 const BOGGLE_MODES = [3, 4, 5, 6]
 
 let clientPromise

@@ -10,6 +10,23 @@ import WordShrink from '../games/WordShrink'
 import LetterLock from '../games/LetterLock'
 import Wordle from '../games/Wordle'
 import Boggle from '../games/Boggle'
+import {
+  AnagramBattle,
+  CategoryRush,
+  CipherWords,
+  CrosswordDaily,
+  DefinitionDuel,
+  MissingLetter,
+  QuoteFill,
+  RhymeTime,
+  SpellingBee,
+  SynonymMatch,
+  TypingSprint,
+  WordLadder,
+  WordMaze,
+  WordSearch,
+  WordSort,
+} from '../games/ExtraGames'
 
 const GAME_COMPONENTS = {
   wordchain: Wordchain,
@@ -19,6 +36,21 @@ const GAME_COMPONENTS = {
   letterlock: LetterLock,
   wordle: Wordle,
   boggle: Boggle,
+  wordsearch: WordSearch,
+  typingsprint: TypingSprint,
+  spellingbee: SpellingBee,
+  wordladder: WordLadder,
+  definitionduel: DefinitionDuel,
+  missingletter: MissingLetter,
+  synonymmatch: SynonymMatch,
+  categoryrush: CategoryRush,
+  wordsort: WordSort,
+  cipherwords: CipherWords,
+  crossworddaily: CrosswordDaily,
+  quotefill: QuoteFill,
+  anagrambattle: AnagramBattle,
+  wordmaze: WordMaze,
+  rhymetime: RhymeTime,
 }
 
 const GAME_RULES = {
@@ -56,7 +88,82 @@ const GAME_RULES = {
   boggle: [
     'Trace connected tiles to spell words at least the chosen length.',
     'Tap the last selected tile again to remove it before submitting.',
-    'Submit valid words to reach the target score before time runs out.',
+    'Submit valid words to reach the target score. Fast clears are tracked silently.',
+  ],
+  wordsearch: [
+    'Tap letters in the grid to mark hidden words.',
+    'A word is found when all of its letters are selected.',
+    'Find every listed word to clear the level.',
+  ],
+  typingsprint: [
+    'Type the displayed word exactly.',
+    'Each correct entry advances to the next word.',
+    'Clear the whole sprint to finish the level.',
+  ],
+  spellingbee: [
+    'Make words using the displayed letters.',
+    'Every answer must include the required center letter.',
+    'Find the target list to clear the level.',
+  ],
+  wordladder: [
+    'Change exactly one letter from the current word.',
+    'Every step must be a valid word.',
+    'Reach the target word to complete the ladder.',
+  ],
+  definitionduel: [
+    'Read the definition and type the matching word.',
+    'The letter count is shown for each clue.',
+    'Solve every clue to win the duel.',
+  ],
+  missingletter: [
+    'Use the visible letters as a pattern.',
+    'Type the complete word, not only the missing letters.',
+    'Complete all prompts to clear the level.',
+  ],
+  synonymmatch: [
+    'Pick a word from the left column.',
+    'Then choose its closest synonym on the right.',
+    'Match every pair to finish.',
+  ],
+  categoryrush: [
+    'Read the word-length prompt.',
+    'Submit valid words that match the length.',
+    'Collect the target number of words.',
+  ],
+  wordsort: [
+    'Read the word in the center.',
+    'Sort it into the correct difficulty shelf.',
+    'Sort every word without changing modes.',
+  ],
+  cipherwords: [
+    'Each word has been shifted through the alphabet.',
+    'Use the shift hint to decode it.',
+    'Decode the full sequence to win.',
+  ],
+  crossworddaily: [
+    'Fill each clue answer in the list.',
+    'Every answer must match its clue and length.',
+    'Check the grid when all answers are filled.',
+  ],
+  quotefill: [
+    'Read the quote with one missing word.',
+    'Type the missing word exactly.',
+    'Fill the phrase to clear the level.',
+  ],
+  anagrambattle: [
+    'Make smaller words from the long source word.',
+    'Use only letters from the source.',
+    'Find enough accepted words to win.',
+  ],
+  wordmaze: [
+    'Tap grid letters to spell the target word.',
+    'Wrong turns reset the current path.',
+    'Clear all target words to finish.',
+  ],
+  rhymetime: [
+    'Use the clue word and ending as your guide.',
+    'Submit valid words with the same ending.',
+    'Find enough rhymes to clear the level.',
   ],
 }
 
