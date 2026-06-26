@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
-import { getWordleAnswerCandidates, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
+import { getWordleAnswerCandidates, getXPForLevel, isValidWord } from '../utils/wordUtils'
+import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
 const LENGTHS = [3, 4, 5, 6]
 const MAX_ATTEMPTS = 6
 const ROWS = Array.from({ length: MAX_ATTEMPTS })
 const KEYS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']
-const FALLBACK_WORDS = { 3: 'cat', 4: 'word', 5: 'crane', 6: 'planet' }
 
 function pickWord(length) {
   const pool = getWordleAnswerCandidates(length)
-  return shuffle(pool)[0] || FALLBACK_WORDS[length]
+  return pickUnusedWord(pool) || ''
 }
 
 function scoreGuess(guess, answer) {
@@ -54,8 +54,13 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
   }))
 
   function start(length) {
+    const nextAnswer = pickWord(length)
+    if (!nextAnswer) {
+      showToast('No word available for this length.', 'error')
+      return
+    }
     setWordLength(length)
-    setAnswer(pickWord(length))
+    setAnswer(nextAnswer)
     setGuesses([])
     setCurrent('')
     setStatus('playing')
@@ -105,6 +110,11 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
       showToast(`'${current.toUpperCase()}' is not in the word list.`, 'error')
       return
     }
+    if (current !== answer && hasUsedWord(current)) {
+      showToast(`'${current.toUpperCase()}' was already used in another puzzle.`, 'error')
+      return
+    }
+    rememberWord(current)
     const nextGuesses = [...guesses, current]
     setGuesses(nextGuesses)
     setCurrent('')

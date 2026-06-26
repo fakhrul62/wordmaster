@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
-import { getLetterLockSets, getSubWords, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
+import { getLetterLockSets, getSubWords, getXPForLevel, isValidWord } from '../utils/wordUtils'
+import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
 function bestCenterLetter(source, candidates) {
   const unique = [...new Set(source)]
@@ -10,8 +11,11 @@ function bestCenterLetter(source, candidates) {
 }
 
 function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
-  const [set] = useState(() => shuffle(getLetterLockSets())[0])
-  const source = set?.word || 'present'
+  const [set] = useState(() => {
+    const pool = getLetterLockSets()
+    return pickUnusedWord(pool, ({ word }) => word)
+  })
+  const source = set?.word || ''
   const allValidWords = useMemo(() => getSubWords(source), [source])
   const centerLetter = useMemo(() => bestCenterLetter(source, allValidWords), [allValidWords, source])
   const centerIndex = source.indexOf(centerLetter)
@@ -82,6 +86,8 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (!answer.includes(centerLetter)) return showToast(`Every word must include ${centerLetter.toUpperCase()}.`, 'error')
     if (!isValidWord(answer) || !validWords.includes(answer)) return showToast(`'${answer}' is not in this lock.`, 'error')
     if (found.includes(answer)) return showToast(`Already found '${answer}'.`, 'error')
+    if (answer !== source && hasUsedWord(answer)) return showToast(`'${answer}' was already used in another puzzle.`, 'error')
+    rememberWord(answer)
     const pangram = answer.length === source.length && [...answer].sort().join('') === [...source].sort().join('')
     const nextScore = score + answer.length * 10 + (pangram ? 50 : 0)
     const nextFound = [...found, answer]
@@ -90,6 +96,10 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     setAnswer('')
     showToast(pangram ? 'Pangram! Bonus unlocked.' : 'Word found!', 'success')
     if (nextFound.length >= target) onComplete(nextScore, getXPForLevel(level), level + 1)
+  }
+
+  if (!source || !centerLetter) {
+    return <div className="game-panel"><p className="empty-state">No fresh lock words available.</p></div>
   }
 
   return (

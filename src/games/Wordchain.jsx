@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
 import { VALID_WORDS, getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
+import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
 function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
   const maxTime = Math.max(6, 15 - Math.floor(level / 3))
   const targetChain = 5 + level
-  const [starter] = useState(() => shuffle(getWordsByLength(3))[0]?.word || 'cat')
-  const [requiredLetter, setRequiredLetter] = useState(starter[0])
+  const [starter] = useState(() => {
+    const pool = getWordsByLength(3)
+    return pickUnusedWord(pool, ({ word }) => word)?.word || ''
+  })
+  const [requiredLetter, setRequiredLetter] = useState(starter[0] || 'a')
   const [input, setInput] = useState('')
   const [chain, setChain] = useState([])
   const [score, setScore] = useState(0)
@@ -50,17 +54,19 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (!word.startsWith(requiredLetter)) return showToast(`Must start with '${requiredLetter.toUpperCase()}'`, 'error')
     if (!isValidWord(word)) return showToast(`'${word}' isn't valid`, 'error')
     if (chain.includes(word)) return showToast(`Already used '${word}'`, 'error')
+    if (hasUsedWord(word)) return showToast(`'${word}' was already used in another puzzle.`, 'error')
+    rememberWord(word)
     const nextChain = [word, ...chain]
     const nextScore = score + word.length * 10
     setChain(nextChain)
     setScore(nextScore)
     const naturalNext = word.at(-1)
     const hasContinuation = VALID_WORDS.some((entry) =>
-      entry.startsWith(naturalNext) && !nextChain.includes(entry))
+      entry.startsWith(naturalNext) && !nextChain.includes(entry) && !hasUsedWord(entry))
     if (hasContinuation) {
       setRequiredLetter(naturalNext)
     } else {
-      const wildcard = shuffle(VALID_WORDS.filter((entry) => !nextChain.includes(entry)))[0]?.[0] || 'a'
+      const wildcard = shuffle(VALID_WORDS.filter((entry) => !nextChain.includes(entry) && !hasUsedWord(entry)))[0]?.[0] || 'a'
       setRequiredLetter(wildcard)
       showToast(`Dead end — wildcard letter ${wildcard.toUpperCase()}!`, 'info')
     }
@@ -68,6 +74,10 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
     setTimeLeft(maxTime)
     if (hasContinuation) showToast('Chain extended!', 'success')
     if (nextChain.length >= targetChain) onComplete(nextScore, getXPForLevel(level), level + 1)
+  }
+
+  if (!starter) {
+    return <div className="game-panel"><p className="empty-state">No fresh chain words available.</p></div>
   }
 
   return (

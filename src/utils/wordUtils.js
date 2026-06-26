@@ -2,7 +2,6 @@ import wordData from '../data/words.json'
 import englishWords from 'an-array-of-english-words'
 
 export const ALL_WORDS = wordData.words
-export const CROSSCLUE_GRIDS = wordData.crossclueGrids
 const BLOCKED_WORDS = new Set([
   'aaa',
   'aaaa',

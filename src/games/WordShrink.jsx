@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
-import { getShrinkableWords, getXPForLevel, isValidWord, shuffle, VALID_WORDS } from '../utils/wordUtils'
+import { getShrinkableWords, getXPForLevel, isValidWord, VALID_WORDS } from '../utils/wordUtils'
+import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
 function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
   const startLength = level <= 5 ? 6 : level <= 10 ? 7 : 8
-  const start = useMemo(() => shuffle(getShrinkableWords(startLength))[0], [startLength])
+  const start = useMemo(() => {
+    const pool = getShrinkableWords(startLength)
+    return pickUnusedWord(pool, ({ word }) => word)
+  }, [startLength])
   const [removedIndex, setRemovedIndex] = useState(null)
   const [input, setInput] = useState('')
   const [score, setScore] = useState(0)
-  const [history, setHistory] = useState([start.word])
+  const [history, setHistory] = useState([start?.word || ''])
   const currentWord = history.at(-1)
   const stepsLeft = currentWord.length - 3
   const remaining = removedIndex === null
@@ -17,6 +21,7 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
     : currentWord.split('').filter((_, index) => index !== removedIndex).join('')
 
   function applyShrink(answer) {
+    rememberWord(answer)
     const nextScore = score + answer.length * 25
     setScore(nextScore)
     setHistory((words) => [...words, answer])
@@ -29,7 +34,7 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
   function getArrangement(letters) {
     const signature = [...letters].sort().join('')
     return VALID_WORDS.find((word) =>
-      word.length === letters.length && [...word].sort().join('') === signature)
+      word.length === letters.length && !hasUsedWord(word) && [...word].sort().join('') === signature)
   }
 
   function chooseLetter(index) {
@@ -58,6 +63,7 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
       return showToast('Use every remaining letter exactly once.', 'error')
     }
     if (!isValidWord(answer)) return showToast(`'${answer}' is not a valid word.`, 'error')
+    if (hasUsedWord(answer)) return showToast(`'${answer}' was already used in another puzzle.`, 'error')
     applyShrink(answer)
   }
 
@@ -66,6 +72,10 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (!target) return showToast('Try removing a different letter.', 'info')
     setInput(target)
     setScore((value) => Math.max(0, value - 10))
+  }
+
+  if (!start) {
+    return <div className="game-panel"><p className="empty-state">No fresh shrink words available.</p></div>
   }
 
   return (

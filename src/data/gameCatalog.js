@@ -106,9 +106,9 @@ export const GAME_CATALOG = [
   {
     key: 'synonymmatch',
     icon: '=',
-    name: 'Synonym Match',
+    name: 'Definition Match',
     shortName: 'Match',
-    desc: 'Pair words with their closest meanings.',
+    desc: 'Pair fresh words with their definitions.',
     color: 'gold',
   },
   {
@@ -146,9 +146,9 @@ export const GAME_CATALOG = [
   {
     key: 'quotefill',
     icon: '“',
-    name: 'Quote Fill',
-    shortName: 'Quote',
-    desc: 'Complete short quotes and phrases.',
+    name: 'Clue Fill',
+    shortName: 'Clue',
+    desc: 'Solve a fresh clue from the word bank.',
     color: 'gold',
   },
   {

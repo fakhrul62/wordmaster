@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
+import { hasUsedWord, rememberWord } from '../utils/uniqueWords'
 
 const BOARD_SIZE = 4
 const LETTERS = 'eeeeeeeeeeeeaaaaaaaaaiiiiiiiiioooooooonnnnnnrrrrrrttttttllllssssuuuuddggbbccmmppffhhvvwwyykjxqz'
@@ -82,9 +83,15 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
       setPath([])
       return
     }
+    if (hasUsedWord(word)) {
+      setPath([])
+      showToast('That word was already used in another puzzle.', 'error')
+      return
+    }
     setValidating(true)
     try {
       if (await isDictionaryWord(word)) {
+        rememberWord(word)
         const wordScore = scoreWord(word)
         setFound((words) => {
           const nextWords = [word, ...words]

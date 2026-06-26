@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
-import { CROSSCLUE_GRIDS, getDifficultyForLevel, getXPForLevel } from '../utils/wordUtils'
-
-function getGridForLevel(level) {
-  const map = { easy: 'easy', medium: 'easy', hard: 'medium', expert: 'hard' }
-  const pool = CROSSCLUE_GRIDS.filter(({ difficulty }) => difficulty === map[getDifficultyForLevel(level)])
-  return pool[(level - 1) % pool.length]
-}
+import { getXPForLevel } from '../utils/wordUtils'
+import { buildDynamicCrossword } from '../utils/crosswordUtils'
 
 function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
-  const grid = useMemo(() => getGridForLevel(level), [level])
+  const grid = useMemo(() => buildDynamicCrossword(level), [level])
   const [answers, setAnswers] = useState({})
   const [activeIndex, setActiveIndex] = useState(0)
   const [, setCursor] = useState(0)
@@ -53,6 +48,7 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
     const entryIndex = activeIndexRef.current
     const position = cursorRef.current
     const entry = grid.entries[entryIndex]
+    if (!entry) return
     const row = entry.row + (entry.direction === 'down' ? position : 0)
     const col = entry.col + (entry.direction === 'across' ? position : 0)
     const cell = cells.get(`${row}-${col}`)
@@ -75,6 +71,7 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
     triggerHaptic(hapticsEnabled)
     const entryIndex = activeIndexRef.current
     const entry = grid.entries[entryIndex]
+    if (!entry) return
     const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
     const position = cursorRef.current
     const target = currentAnswer[position] ? position : Math.max(0, position - 1)
@@ -114,6 +111,10 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
       if (value && value !== ' ') return value
     }
     return ''
+  }
+
+  if (!active) {
+    return <div className="game-panel"><p className="empty-state">No fresh crossword words available.</p></div>
   }
 
   return (
@@ -166,7 +167,7 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
           if (event.key === 'Backspace') {
             event.preventDefault()
             erase()
-          } else if (event.key === 'Enter' && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
+          } else if (event.key === 'Enter' && active && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
         }}
         aria-label="Crossword letter input"
       />

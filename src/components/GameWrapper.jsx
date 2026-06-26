@@ -91,9 +91,9 @@ const GAME_RULES = {
     'Submit valid words to reach the target score. Fast clears are tracked silently.',
   ],
   wordsearch: [
-    'Tap connected letters in the grid to trace real words.',
-    'Any valid connected word of four or more letters counts.',
-    'Use hint to highlight a starting tile without revealing the word.',
+    'Tap letters in one row, column, or diagonal line.',
+    'Any valid word of three or more letters counts.',
+    'Submit accepted words to reach the target count.',
   ],
   typingsprint: [
     'Type the displayed word exactly.',
@@ -122,7 +122,7 @@ const GAME_RULES = {
   ],
   synonymmatch: [
     'Pick a word from the left column.',
-    'Then choose its closest synonym on the right.',
+    'Then choose the matching definition on the right.',
     'Match every pair to finish.',
   ],
   categoryrush: [
@@ -146,9 +146,9 @@ const GAME_RULES = {
     'Check the grid when every clue has been answered.',
   ],
   quotefill: [
-    'Read the quote with one missing word.',
-    'Type the missing word exactly.',
-    'Fill the phrase to clear the level.',
+    'Read the fresh clue.',
+    'Type the matching word exactly.',
+    'Solve the clue to clear the level.',
   ],
   anagrambattle: [
     'Make smaller words from the long source word.',

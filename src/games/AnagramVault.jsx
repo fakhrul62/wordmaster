@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { triggerHaptic } from '../utils/haptics'
 import { getCategoryForDifficulty, getDifficultyForLevel, getXPForLevel, getWordsByCategory, shuffle } from '../utils/wordUtils'
+import { pickUnusedWords } from '../utils/uniqueWords'
 
 function scramble(word) {
   let letters = shuffle(word.split(''))
@@ -14,11 +15,11 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
   const words = useMemo(() => {
     const category = getCategoryForDifficulty(getDifficultyForLevel(level))
     const pool = getWordsByCategory(category).filter(({ length }) => length >= 4 && length <= 8)
-    return shuffle(pool).slice(0, wordCount)
+    return pickUnusedWords(pool, wordCount, ({ word }) => word)
   }, [level, wordCount])
   const [wordIndex, setWordIndex] = useState(0)
   const current = words[wordIndex] || words[0]
-  const [tiles, setTiles] = useState(() => scramble(current?.word || 'word'))
+  const [tiles, setTiles] = useState(() => scramble(current?.word || ''))
   const [selected, setSelected] = useState([])
   const [timeLeft, setTimeLeft] = useState(timeLimit)
   const [score, setScore] = useState(0)
@@ -39,7 +40,7 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
         setWordIndex(0)
         setScore(0)
         setSelected([])
-        setTiles(scramble(words[0]?.word || 'word'))
+        setTiles(scramble(words[0]?.word || ''))
         return timeLimit
       })
     }, 1000)
@@ -99,6 +100,10 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
     const tile = tiles.find(({ id, letter }) => !used.has(id) && letter === nextLetter)
     if (tile) setSelected((items) => [...items, tile])
     setScore((value) => Math.max(0, value - 5))
+  }
+
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh vault words available.</p></div>
   }
 
   return (

@@ -3,55 +3,79 @@ import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
 import {
   ALL_WORDS,
-  CROSSCLUE_GRIDS,
   getLetterLockSets,
   getSubWords,
   getWordsByCategory,
+  getWordsByLength,
   getXPForLevel,
   isValidWord,
   shuffle,
+  VALID_WORDS,
 } from '../utils/wordUtils'
+import { buildDynamicCrossword } from '../utils/crosswordUtils'
+import { hasUsedWord, pickUnusedWord, pickUnusedWords, rememberWord } from '../utils/uniqueWords'
 
 const CATEGORIES = ['common', 'medium', 'hard']
 const SORT_LABELS = { common: 'Common', medium: 'Medium', hard: 'Hard' }
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
-const RHYME_GROUPS = [
-  { clue: 'light', ending: 'ight' },
-  { clue: 'stone', ending: 'one' },
-  { clue: 'game', ending: 'ame' },
-  { clue: 'sound', ending: 'ound' },
-]
-const SYNONYM_PAIRS = [
-  ['fast', 'quick'],
-  ['big', 'large'],
-  ['small', 'tiny'],
-  ['smart', 'clever'],
-  ['happy', 'glad'],
-  ['calm', 'quiet'],
-  ['start', 'begin'],
-  ['end', 'finish'],
-]
-const QUOTES = [
-  { text: 'Knowledge is power', answer: 'power' },
-  { text: 'Practice makes progress', answer: 'progress' },
-  { text: 'Words build worlds', answer: 'worlds' },
-  { text: 'Stay curious always', answer: 'curious' },
-  { text: 'Read more learn more', answer: 'learn' },
-]
-const LADDERS = [
-  ['cat', 'cot', 'dot', 'dog'],
-  ['cold', 'cord', 'card', 'ward', 'warm'],
-  ['lead', 'load', 'goad', 'gold'],
-  ['same', 'came', 'cane', 'lane', 'land'],
-]
 
 function pickWordEntries(level, count, options = {}) {
   const category = options.category || CATEGORIES[Math.floor((level - 1) / 4) % CATEGORIES.length]
   const minLength = options.minLength || 3
   const maxLength = options.maxLength || 8
-  return shuffle(getWordsByCategory(category).filter(({ word, definition }) =>
+  const pool = getWordsByCategory(category).filter(({ word, definition }) =>
     word.length >= minLength && word.length <= maxLength && definition,
-  )).slice(0, count)
+  )
+  return pickUnusedWords(pool, count, ({ word }) => word)
+}
+
+function differsByOne(a, b) {
+  return a.length === b.length && a.split('').filter((letter, index) => letter !== b[index]).length === 1
+}
+
+function buildWordLadder(level) {
+  const length = level < 8 ? 3 : 4
+  const pool = getWordsByLength(length)
+    .map(({ word }) => word)
+    .filter((word) => isValidWord(word))
+  const start = pickUnusedWord(pool)
+  if (!start) return []
+  const queue = [[start, [start]]]
+  const visited = new Set([start])
+
+  while (queue.length) {
+    const [word, path] = queue.shift()
+    for (const next of pool) {
+      if (visited.has(next) || !differsByOne(word, next)) continue
+      const nextPath = [...path, next]
+      if (nextPath.length >= 4 && !hasUsedWord(next)) {
+        rememberWord(next)
+        return nextPath
+      }
+      visited.add(next)
+      queue.push([next, nextPath])
+    }
+  }
+
+  const target = pickUnusedWord(pool.filter((word) => word !== start))
+  return target ? [start, target] : []
+}
+
+function buildRhymeGroup(level) {
+  const groups = new Map()
+  VALID_WORDS.filter((word) => word.length >= 4 && word.length <= 10).forEach((word) => {
+    const ending = word.slice(-3)
+    groups.set(ending, [...(groups.get(ending) || []), word])
+  })
+  const options = [...groups.entries()].filter(([, words]) =>
+    words.filter((word) => !hasUsedWord(word)).length >= 4)
+  const [ending, words] = shuffle(options)[0] || []
+  const clue = words ? pickUnusedWord(words) : ''
+  return {
+    clue,
+    ending: ending || '',
+    target: Math.min(6, 4 + Math.floor(level / 5)),
+  }
 }
 
 function scoreFor(words, bonus = 0) {
@@ -86,83 +110,69 @@ function TextAnswer({ value, onChange, onSubmit, placeholder = 'Type answer...' 
 
 function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   const size = 8
-  const puzzle = useMemo(() => {
-    const targetWords = Math.min(7, 5 + Math.floor(level / 8))
-    const candidates = pickWordEntries(level, targetWords + 12, { minLength: 4, maxLength: 7 }).map(({ word }) => word)
-    const grid = Array.from({ length: size }, () => Array.from({ length: size }, () => ''))
-    const words = []
-    const placements = {}
-    const directions = [[0, 1], [1, 0], [1, 1], [1, -1], [0, -1], [-1, 0], [-1, -1], [-1, 1]]
-    const starts = Array.from({ length: size * size }, (_, index) => ({
-      row: Math.floor(index / size),
-      col: index % size,
-    })).sort((a, b) => {
-      const center = (size - 1) / 2
-      return Math.hypot(a.row - center, a.col - center) - Math.hypot(b.row - center, b.col - center)
-    })
-
-    function findPath(word) {
-      const canUse = ({ row, col }, letter, used) =>
-        row >= 0 &&
-        row < size &&
-        col >= 0 &&
-        col < size &&
-        !used.has(`${row}-${col}`) &&
-        (!grid[row][col] || grid[row][col] === letter)
-
-      function walk(path, letterIndex, previousDirection, turned, used) {
-        if (letterIndex >= word.length) return turned || word.length < 5 ? path : null
-        const current = path.at(-1)
-        const nextDirections = shuffle(directions).sort((first, second) => {
-          const firstStraight = previousDirection && first[0] === previousDirection[0] && first[1] === previousDirection[1]
-          const secondStraight = previousDirection && second[0] === previousDirection[0] && second[1] === previousDirection[1]
-          return Number(firstStraight) - Number(secondStraight)
-        })
-        for (const direction of nextDirections) {
-          const nextCell = { row: current.row + direction[0], col: current.col + direction[1] }
-          const key = `${nextCell.row}-${nextCell.col}`
-          const nextTurned = turned || Boolean(previousDirection && (direction[0] !== previousDirection[0] || direction[1] !== previousDirection[1]))
-          if (!canUse(nextCell, word[letterIndex], used)) continue
-          used.add(key)
-          const result = walk([...path, { ...nextCell, letter: word[letterIndex] }], letterIndex + 1, direction, nextTurned, used)
-          if (result) return result
-          used.delete(key)
-        }
-        return null
-      }
-
-      for (const start of starts) {
-        const key = `${start.row}-${start.col}`
-        if (!canUse(start, word[0], new Set())) continue
-        const result = walk([{ ...start, letter: word[0] }], 1, null, false, new Set([key]))
-        if (result) return result
-      }
-      return null
-    }
-
-    for (const word of candidates) {
-      const cells = findPath(word)
-      if (!cells) continue
-      cells.forEach((cell) => { grid[cell.row][cell.col] = cell.letter })
-      words.push(word)
-      placements[word] = cells.map((cell) => `${cell.row}-${cell.col}`)
-      if (words.length >= targetWords) break
-    }
-    grid.forEach((row, rowIndex) => row.forEach((letter, colIndex) => {
-      if (!letter) grid[rowIndex][colIndex] = ALPHABET[Math.floor(Math.random() * ALPHABET.length)]
-    }))
-    return { words, grid, placements, targetWords }
-  }, [level])
+  const targetWords = Math.min(8, 4 + Math.floor(level / 6))
+  const [boardSeed, setBoardSeed] = useState(0)
+  const puzzle = useMemo(() => ({
+    seed: `${level}-${boardSeed}`,
+    grid: Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)])),
+  }), [boardSeed, level, size])
   const [selected, setSelected] = useState([])
   const [found, setFound] = useState([])
   const [foundPaths, setFoundPaths] = useState({})
-  const [hintCursor, setHintCursor] = useState(0)
   const score = scoreFor(found)
 
-  function isAdjacent(previousCell, nextCell) {
-    const [previousRow, previousCol] = previousCell.split('-').map(Number)
-    const [nextRow, nextCol] = nextCell.split('-').map(Number)
-    return Math.max(Math.abs(previousRow - nextRow), Math.abs(previousCol - nextCol)) === 1
+  useEffect(() => {
+    setSelected([])
+    setFound([])
+    setFoundPaths({})
+  }, [level])
+
+  function getCellPosition(cell) {
+    const [row, col] = cell.split('-').map(Number)
+    return { row, col }
+  }
+
+  function getStep(fromCell, toCell) {
+    const from = getCellPosition(fromCell)
+    const to = getCellPosition(toCell)
+    return {
+      row: Math.sign(to.row - from.row),
+      col: Math.sign(to.col - from.col),
+      rowDistance: Math.abs(to.row - from.row),
+      colDistance: Math.abs(to.col - from.col),
+    }
+  }
+
+  function isValidStraightStep(previousCell, nextCell) {
+    const step = getStep(previousCell, nextCell)
+    return step.rowDistance <= 1 &&
+      step.colDistance <= 1 &&
+      step.rowDistance + step.colDistance > 0 &&
+      (step.rowDistance === 0 || step.colDistance === 0 || step.rowDistance === step.colDistance)
+  }
+
+  function followsDirection(step, direction) {
+    return step.row === direction.row &&
+      step.col === direction.col &&
+      step.rowDistance === Math.abs(direction.row) &&
+      step.colDistance === Math.abs(direction.col)
+  }
+
+  function keepsSameLine(path, nextCell) {
+    if (path.length < 2) return isValidStraightStep(path.at(-1), nextCell)
+    const firstStep = getStep(path[0], path[1])
+    const nextStep = getStep(path.at(-1), nextCell)
+    return followsDirection(nextStep, firstStep)
+  }
+
+  function isStraightPath(path) {
+    if (path.length < 2) return true
+    const firstStep = getStep(path[0], path[1])
+    return path.slice(2).every((cell, index) => {
+      const step = getStep(path[index + 1], cell)
+      return followsDirection(step, firstStep)
+    })
   }
 
   function wordFromPath(path) {
@@ -178,39 +188,33 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
     const selectedIndex = selected.indexOf(cell)
     const next = selectedIndex >= 0
       ? selected.slice(0, selectedIndex)
-      : lastSelected && !isAdjacent(lastSelected, cell)
+      : lastSelected && !keepsSameLine(selected, cell)
         ? [cell]
         : [...selected, cell]
     setSelected(next)
-    const hiddenMatch = puzzle.words.find((word) =>
-      !found.includes(word) &&
-      next.join('|') === puzzle.placements[word].join('|'))
-    const tracedWord = wordFromPath(next)
-    const match = hiddenMatch || (
-      tracedWord.length >= 4 &&
-      isValidWord(tracedWord) &&
-      !found.includes(tracedWord)
-        ? tracedWord
-        : ''
-    )
-    if (!match) return
-    const nextFound = [...found, match]
-    const nextPaths = { ...foundPaths, [match]: next }
+  }
+
+  function submitWord() {
+    const tracedWord = wordFromPath(selected)
+    if (tracedWord.length < 3) return showToast('Words need at least three letters.', 'error')
+    if (!isStraightPath(selected)) return showToast('Use one row, column, or diagonal line.', 'error')
+    if (!isValidWord(tracedWord)) return showToast('Use a meaningful word.', 'error')
+    if (found.includes(tracedWord)) return showToast('Already found.', 'info')
+    if (hasUsedWord(tracedWord)) return showToast('That word was already used in another puzzle.', 'error')
+    rememberWord(tracedWord)
+    const nextFound = [...found, tracedWord]
+    const nextPaths = { ...foundPaths, [tracedWord]: selected }
     setFound(nextFound)
     setFoundPaths(nextPaths)
     setSelected([])
-    showToast(`${match.toUpperCase()} found`, 'success')
-    if (nextFound.length >= puzzle.targetWords) finishGame(onComplete, level, scoreFor(nextFound, 100))
+    showToast(`${tracedWord.toUpperCase()} found`, 'success')
+    if (nextFound.length >= targetWords) finishGame(onComplete, level, scoreFor(nextFound, 100))
   }
 
-  function useHint() {
-    const hintOptions = puzzle.words.filter((word) => !found.includes(word))
-    const hintWord = hintOptions[hintCursor % Math.max(1, hintOptions.length)]
-    if (!hintWord) return showToast('No hints left on this board.', 'info')
-    triggerHaptic(hapticsEnabled)
-    setSelected([puzzle.placements[hintWord][0]])
-    setHintCursor((cursor) => cursor + 1)
-    showToast('Start from the highlighted tile.', 'info')
+  function refreshBoard() {
+    setSelected([])
+    setFoundPaths({})
+    setBoardSeed((seed) => seed + 1)
   }
 
   return (
@@ -218,7 +222,7 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
       <ScoreBar score={score} xp={getXPForLevel(level)} />
       <div className="status-row">
         <span className="neutral-status">Found</span>
-        <strong>{found.length}/{puzzle.targetWords}</strong>
+        <strong>{found.length}/{targetWords}</strong>
         {selected.length > 0 && <span>{selected.length} selected</span>}
       </div>
       <div className="word-search-grid" style={{ gridTemplateColumns: `repeat(${size},1fr)` }}>
@@ -233,8 +237,9 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
         }))}
       </div>
       <div className="word-search-actions">
-        <button className="btn-secondary" onClick={useHint} disabled={found.length >= puzzle.targetWords}>HINT</button>
+        <button className="btn-primary" onClick={submitWord} disabled={!selected.length || found.length >= targetWords}>SUBMIT WORD</button>
         <button className="btn-secondary" onClick={() => setSelected([])} disabled={!selected.length}>CLEAR SELECTION</button>
+        <button className="btn-secondary" onClick={refreshBoard} disabled={found.length >= targetWords}>NEW BOARD</button>
       </div>
     </div>
   )
@@ -259,6 +264,10 @@ function TypingSprint({ level, onComplete, showToast, hapticsEnabled = true }) {
     else setIndex(nextIndex)
   }
 
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh sprint words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
@@ -271,10 +280,11 @@ function TypingSprint({ level, onComplete, showToast, hapticsEnabled = true }) {
 
 function SpellingBee({ level, onComplete, showToast }) {
   const puzzle = useMemo(() => {
-    const set = shuffle(getLetterLockSets())[0]
-    const source = set?.word || 'letters'
+    const pool = getLetterLockSets()
+    const set = pickUnusedWord(pool, ({ word }) => word)
+    const source = set?.word || ''
     const center = source[Math.floor(source.length / 2)]
-    const answers = shuffle(getSubWords(source, center)).slice(0, Math.min(10, 4 + level))
+    const answers = pickUnusedWords(getSubWords(source, center), Math.min(10, 4 + level))
     return { source, center, answers }
   }, [level])
   const [input, setInput] = useState('')
@@ -293,6 +303,10 @@ function SpellingBee({ level, onComplete, showToast }) {
     if (nextFound.length >= puzzle.answers.length) finishGame(onComplete, level, scoreFor(nextFound, 120))
   }
 
+  if (!puzzle.source || !puzzle.center) {
+    return <div className="game-panel"><p className="empty-state">No fresh hive words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
@@ -304,15 +318,11 @@ function SpellingBee({ level, onComplete, showToast }) {
 }
 
 function WordLadder({ level, onComplete, showToast }) {
-  const path = useMemo(() => LADDERS[(level - 1) % LADDERS.length], [level])
+  const path = useMemo(() => buildWordLadder(level), [level])
   const [steps, setSteps] = useState([path[0]])
   const [input, setInput] = useState('')
   const current = steps.at(-1)
   const target = path.at(-1)
-
-  function differsByOne(a, b) {
-    return a.length === b.length && a.split('').filter((letter, index) => letter !== b[index]).length === 1
-  }
 
   function submit(event) {
     event.preventDefault()
@@ -320,10 +330,16 @@ function WordLadder({ level, onComplete, showToast }) {
     if (!differsByOne(current, word)) return showToast('Change exactly one letter.', 'error')
     if (!isValidWord(word)) return showToast('Use a valid word.', 'error')
     if (steps.includes(word)) return showToast('Already used.', 'error')
+    if (word !== target && hasUsedWord(word)) return showToast('That word was already used in another puzzle.', 'error')
+    rememberWord(word)
     const nextSteps = [...steps, word]
     setSteps(nextSteps)
     setInput('')
     if (word === target) finishGame(onComplete, level, Math.max(100, 700 - nextSteps.length * 60))
+  }
+
+  if (!current || !target || current === target) {
+    return <div className="game-panel"><p className="empty-state">No fresh ladder words available.</p></div>
   }
 
   return (
@@ -353,6 +369,10 @@ function DefinitionDuel({ level, onComplete, showToast }) {
     else setIndex(index + 1)
   }
 
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh definition words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
@@ -367,7 +387,7 @@ function MissingLetter({ level, onComplete, showToast }) {
   const [index, setIndex] = useState(0)
   const [input, setInput] = useState('')
   const [score, setScore] = useState(0)
-  const current = words[index].word
+  const current = words[index]?.word || ''
   const masked = current.split('').map((letter, letterIndex) =>
     (letterIndex + level + index) % 3 === 0 ? '_' : letter).join(' ')
 
@@ -381,6 +401,10 @@ function MissingLetter({ level, onComplete, showToast }) {
     else setIndex(index + 1)
   }
 
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh missing-letter words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
@@ -391,19 +415,27 @@ function MissingLetter({ level, onComplete, showToast }) {
 }
 
 function SynonymMatch({ level, onComplete, showToast }) {
-  const pairs = useMemo(() => shuffle(SYNONYM_PAIRS).slice(0, Math.min(6, 3 + Math.floor(level / 2))), [level])
+  const pairs = useMemo(
+    () => pickWordEntries(level, Math.min(6, 3 + Math.floor(level / 2)), { minLength: 4, maxLength: 8 })
+      .map(({ word, definition }) => [word, definition]),
+    [level],
+  )
   const [left, setLeft] = useState('')
   const [matched, setMatched] = useState([])
-  const rightWords = useMemo(() => shuffle(pairs.map((pair) => pair[1])), [pairs])
+  const rightDefinitions = useMemo(() => shuffle(pairs.map((pair) => pair[1])), [pairs])
 
-  function chooseRight(word) {
+  function chooseRight(definition) {
     if (!left) return showToast('Pick a word first.', 'info')
     const pair = pairs.find(([source]) => source === left)
-    if (pair?.[1] !== word) return showToast('Not a match.', 'error')
+    if (pair?.[1] !== definition) return showToast('Not a match.', 'error')
     const nextMatched = [...matched, left]
     setMatched(nextMatched)
     setLeft('')
     if (nextMatched.length >= pairs.length) finishGame(onComplete, level, pairs.length * 120)
+  }
+
+  if (!pairs.length) {
+    return <div className="game-panel"><p className="empty-state">No fresh match words available.</p></div>
   }
 
   return (
@@ -411,7 +443,7 @@ function SynonymMatch({ level, onComplete, showToast }) {
       <ScoreBar score={matched.length * 120} xp={getXPForLevel(level)} />
       <div className="match-grid">
         <div>{pairs.map(([word]) => <button className={`btn-secondary ${left === word ? 'selected' : ''}`} disabled={matched.includes(word)} key={word} onClick={() => setLeft(word)}>{word}</button>)}</div>
-        <div>{rightWords.map((word) => <button className="btn-secondary" disabled={matched.some((item) => pairs.find(([source]) => source === item)?.[1] === word)} key={word} onClick={() => chooseRight(word)}>{word}</button>)}</div>
+        <div>{rightDefinitions.map((definition) => <button className="btn-secondary" disabled={matched.some((item) => pairs.find(([source]) => source === item)?.[1] === definition)} key={definition} onClick={() => chooseRight(definition)}>{definition}</button>)}</div>
       </div>
     </div>
   )
@@ -429,6 +461,8 @@ function CategoryRush({ level, onComplete, showToast }) {
     if (word.length !== length) return showToast(`Use ${length} letters.`, 'error')
     if (!isValidWord(word)) return showToast('Use a valid word.', 'error')
     if (found.includes(word)) return showToast('Already used.', 'error')
+    if (hasUsedWord(word)) return showToast('That word was already used in another puzzle.', 'error')
+    rememberWord(word)
     const nextFound = [...found, word]
     setFound(nextFound)
     setInput('')
@@ -446,9 +480,9 @@ function CategoryRush({ level, onComplete, showToast }) {
 }
 
 function WordSort({ level, onComplete, showToast }) {
-  const words = useMemo(() => shuffle(CATEGORIES.flatMap((category) =>
+  const words = useMemo(() => pickUnusedWords(CATEGORIES.flatMap((category) =>
     getWordsByCategory(category).filter(({ word }) => word.length >= 4 && word.length <= 7).slice(0, 24),
-  )).slice(0, 6), [level])
+  ), 6, ({ word }) => word), [level])
   const [index, setIndex] = useState(0)
   const [score, setScore] = useState(0)
   const current = words[index]
@@ -459,6 +493,10 @@ function WordSort({ level, onComplete, showToast }) {
     setScore(nextScore)
     if (index + 1 >= words.length) finishGame(onComplete, level, nextScore)
     else setIndex(index + 1)
+  }
+
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh sorting words available.</p></div>
   }
 
   return (
@@ -478,7 +516,7 @@ function CipherWords({ level, onComplete, showToast }) {
   const [index, setIndex] = useState(0)
   const [input, setInput] = useState('')
   const [score, setScore] = useState(0)
-  const current = words[index]
+  const current = words[index] || ''
   const cipher = current.split('').map((letter) => ALPHABET[(ALPHABET.indexOf(letter) + shift) % 26]).join('')
 
   function submit(event) {
@@ -491,6 +529,10 @@ function CipherWords({ level, onComplete, showToast }) {
     else setIndex(index + 1)
   }
 
+  if (!current) {
+    return <div className="game-panel"><p className="empty-state">No fresh cipher words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={score} xp={getXPForLevel(level)} />
@@ -501,7 +543,7 @@ function CipherWords({ level, onComplete, showToast }) {
 }
 
 function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true }) {
-  const grid = useMemo(() => CROSSCLUE_GRIDS[(level - 1) % CROSSCLUE_GRIDS.length], [level])
+  const grid = useMemo(() => buildDynamicCrossword(level), [level])
   const [answers, setAnswers] = useState({})
   const [activeIndex, setActiveIndex] = useState(0)
   const [, setCursor] = useState(0)
@@ -561,6 +603,7 @@ function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true })
     const entryIndex = activeIndexRef.current
     const position = cursorRef.current
     const entry = grid.entries[entryIndex]
+    if (!entry) return
     const row = entry.row + (entry.direction === 'down' ? position : 0)
     const col = entry.col + (entry.direction === 'across' ? position : 0)
     const cell = cells.get(`${row}-${col}`)
@@ -584,6 +627,7 @@ function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true })
     triggerHaptic(hapticsEnabled)
     const entryIndex = activeIndexRef.current
     const entry = grid.entries[entryIndex]
+    if (!entry) return
     const currentAnswer = (answersRef.current[entryIndex] || '').padEnd(entry.word.length, ' ')
     const position = cursorRef.current
     const target = currentAnswer[position] ? position : Math.max(0, position - 1)
@@ -618,6 +662,10 @@ function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true })
   }, [erase, typeLetter])
 
   const lettersFilled = Object.values(answers).join('').replace(/\s/g, '').length
+
+  if (!active) {
+    return <div className="game-panel"><p className="empty-state">No fresh crossword words available.</p></div>
+  }
 
   return (
     <div className="game-panel crossclue-panel">
@@ -698,20 +746,23 @@ function CrosswordDaily({ level, onComplete, showToast, hapticsEnabled = true })
 }
 
 function QuoteFill({ level, onComplete, showToast }) {
-  const quote = QUOTES[(level - 1) % QUOTES.length]
+  const prompt = useMemo(() => pickWordEntries(level, 1, { minLength: 4, maxLength: 9 })[0], [level])
   const [input, setInput] = useState('')
-  const display = quote.text.replace(new RegExp(quote.answer, 'i'), '_____')
 
   function submit(event) {
     event.preventDefault()
-    if (normalize(input) !== quote.answer) return showToast('That does not fit the quote.', 'error')
-    finishGame(onComplete, level, quote.answer.length * 80)
+    if (normalize(input) !== prompt.word) return showToast('That does not fit the clue.', 'error')
+    finishGame(onComplete, level, prompt.word.length * 80)
+  }
+
+  if (!prompt) {
+    return <div className="game-panel"><p className="empty-state">No fresh clue words available.</p></div>
   }
 
   return (
     <div className="game-panel">
       <ScoreBar score={0} xp={getXPForLevel(level)} />
-      <section className="prompt-card"><p>Fill the quote</p><strong className="big-letter compact-word">{display}</strong></section>
+      <section className="prompt-card"><p>Find the word</p><strong className="big-letter compact-word">{prompt.definition}</strong></section>
       <TextAnswer value={input} onChange={setInput} onSubmit={submit} />
     </div>
   )
@@ -719,10 +770,10 @@ function QuoteFill({ level, onComplete, showToast }) {
 
 function AnagramBattle({ level, onComplete, showToast }) {
   const puzzle = useMemo(() => {
-    const source = shuffle(getLetterLockSets())[0]?.word ||
-      shuffle(ALL_WORDS.filter(({ word }) => word.length >= 7 && word.length <= 9))[0]?.word ||
-      'triangle'
-    const answers = shuffle(getSubWords(source)).slice(0, Math.min(10, 4 + level))
+    const sourceEntry = pickUnusedWord(getLetterLockSets(), ({ word }) => word) ||
+      pickUnusedWord(ALL_WORDS.filter(({ word }) => word.length >= 7 && word.length <= 9), ({ word }) => word)
+    const source = sourceEntry?.word || ''
+    const answers = pickUnusedWords(getSubWords(source), Math.min(10, 4 + level))
     return { source, answers }
   }, [level])
   const [input, setInput] = useState('')
@@ -739,6 +790,10 @@ function AnagramBattle({ level, onComplete, showToast }) {
     if (nextFound.length >= puzzle.answers.length) finishGame(onComplete, level, scoreFor(nextFound, 150))
   }
 
+  if (!puzzle.source || !puzzle.answers.length) {
+    return <div className="game-panel"><p className="empty-state">No fresh anagram words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={scoreFor(found)} xp={getXPForLevel(level)} />
@@ -753,7 +808,7 @@ function WordMaze({ level, onComplete, showToast }) {
   const words = useMemo(() => pickWordEntries(level, 4, { minLength: 4, maxLength: 6 }).map(({ word }) => word), [level])
   const [index, setIndex] = useState(0)
   const [path, setPath] = useState([])
-  const target = words[index]
+  const target = words[index] || ''
   const grid = useMemo(() => {
     const cells = Array.from({ length: 25 }, (_, cellIndex) => ALPHABET[(cellIndex * 5 + level) % 26])
     target.split('').forEach((letter, letterIndex) => { cells[letterIndex * 5] = letter })
@@ -777,6 +832,10 @@ function WordMaze({ level, onComplete, showToast }) {
     }
   }
 
+  if (!target) {
+    return <div className="game-panel"><p className="empty-state">No fresh maze words available.</p></div>
+  }
+
   return (
     <div className="game-panel">
       <ScoreBar score={index * 120} xp={getXPForLevel(level)} />
@@ -789,7 +848,7 @@ function WordMaze({ level, onComplete, showToast }) {
 }
 
 function RhymeTime({ level, onComplete, showToast }) {
-  const group = RHYME_GROUPS[(level - 1) % RHYME_GROUPS.length]
+  const group = useMemo(() => buildRhymeGroup(level), [level])
   const [input, setInput] = useState('')
   const [found, setFound] = useState([])
 
@@ -798,16 +857,22 @@ function RhymeTime({ level, onComplete, showToast }) {
     const word = normalize(input)
     if (!word.endsWith(group.ending) || !isValidWord(word)) return showToast(`Find words ending ${group.ending.toUpperCase()}.`, 'error')
     if (found.includes(word)) return showToast('Already rhymed.', 'info')
+    if (hasUsedWord(word)) return showToast('That word was already used in another puzzle.', 'error')
+    rememberWord(word)
     const nextFound = [...found, word]
     setFound(nextFound)
     setInput('')
-    if (nextFound.length >= 4) finishGame(onComplete, level, scoreFor(nextFound, 100))
+    if (nextFound.length >= group.target) finishGame(onComplete, level, scoreFor(nextFound, 100))
+  }
+
+  if (!group.clue || !group.ending) {
+    return <div className="game-panel"><p className="empty-state">No fresh rhyme words available.</p></div>
   }
 
   return (
     <div className="game-panel">
       <ScoreBar score={scoreFor(found)} xp={getXPForLevel(level)} />
-      <section className="prompt-card"><p>Rhyme with</p><strong className="big-letter compact-word">{group.clue}</strong></section>
+      <section className="prompt-card"><p>Rhyme with</p><strong className="big-letter compact-word">{group.clue}</strong><p>{found.length}/{group.target}</p></section>
       <TextAnswer value={input} onChange={setInput} onSubmit={submit} />
       <div className="found-words">{found.map((word) => <span className="found-word-chip" key={word}>{word}</span>)}</div>
     </div>
