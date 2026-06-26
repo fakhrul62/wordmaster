@@ -64,6 +64,14 @@ export const GAME_CATALOG = [
     color: 'green',
   },
   {
+    key: 'wordsearchpuzzle',
+    icon: '▧',
+    name: 'Word Search Puzzle',
+    shortName: 'Seek',
+    desc: 'Trace themed hidden words against the clock.',
+    color: 'cyan',
+  },
+  {
     key: 'typingsprint',
     icon: '⌨',
     name: 'Typing Sprint',

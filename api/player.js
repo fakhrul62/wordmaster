@@ -9,6 +9,7 @@ const GAME_KEYS = [
   'wordle',
   'boggle',
   'wordsearch',
+  'wordsearchpuzzle',
   'typingsprint',
   'spellingbee',
   'wordladder',

@@ -10,6 +10,7 @@ import WordShrink from '../games/WordShrink'
 import LetterLock from '../games/LetterLock'
 import Wordle from '../games/Wordle'
 import Boggle from '../games/Boggle'
+import WordSearchPuzzle from '../games/WordSearchPuzzle'
 import {
   AnagramBattle,
   CategoryRush,
@@ -37,6 +38,7 @@ const GAME_COMPONENTS = {
   wordle: Wordle,
   boggle: Boggle,
   wordsearch: WordSearch,
+  wordsearchpuzzle: WordSearchPuzzle,
   typingsprint: TypingSprint,
   spellingbee: SpellingBee,
   wordladder: WordLadder,
@@ -94,6 +96,11 @@ const GAME_RULES = {
     'Tap letters in one row, column, or diagonal line.',
     'Find valid 3, 4, 5, and 6-letter words.',
     'Submit enough fresh words to reach the target count.',
+  ],
+  wordsearchpuzzle: [
+    'Pick a difficulty and theme.',
+    'Drag in one straight line to select words forward or reversed.',
+    'Find every themed word before stopping the timer.',
   ],
   typingsprint: [
     'Type the displayed word exactly.',
@@ -180,6 +187,11 @@ function spawnConfetti() {
   }
 }
 
+function formatResultTime(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0))
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
+
 function GameWrapper({
   gameKey,
   level,
@@ -258,7 +270,7 @@ function GameWrapper({
     setSelectedLevel(nextLevel)
     setLevelSelectionOpen(false)
     setRulesAccepted(true)
-    setResult({ score, xp, nextLevel })
+    setResult({ score, xp, nextLevel, completionTime: details.completionTime })
     spawnConfetti()
   }
 
@@ -371,7 +383,11 @@ function GameWrapper({
         <div className="level-complete-overlay" role="dialog" aria-modal="true" aria-labelledby="level-complete-title">
           <p className="eyebrow">Level cleared</p>
           <h1 id="level-complete-title">Excellent work.</h1>
-          <div className="result-score"><span>{result.score} points</span><span>+{result.xp} XP</span></div>
+          <div className="result-score">
+            <span>{result.score} points</span>
+            <span>+{result.xp} XP</span>
+            {result.completionTime && <span>{formatResultTime(result.completionTime)}</span>}
+          </div>
           <div className="btn-row">
             <button className="btn-primary" onClick={() => setResult(null)}>NEXT LEVEL</button>
             <button className="btn-secondary" onClick={onBack}>HOME</button>
