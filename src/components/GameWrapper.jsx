@@ -92,8 +92,8 @@ const GAME_RULES = {
   ],
   wordsearch: [
     'Tap letters in one row, column, or diagonal line.',
-    'Any valid word of three or more letters counts.',
-    'Submit accepted words to reach the target count.',
+    'Find valid 3, 4, 5, and 6-letter words.',
+    'Submit enough fresh words to reach the target count.',
   ],
   typingsprint: [
     'Type the displayed word exactly.',

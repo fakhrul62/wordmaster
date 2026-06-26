@@ -13,11 +13,22 @@ import {
   VALID_WORDS,
 } from '../utils/wordUtils'
 import { buildDynamicCrossword } from '../utils/crosswordUtils'
-import { hasUsedWord, pickUnusedWord, pickUnusedWords, rememberWord } from '../utils/uniqueWords'
+import { getUsedWords, hasUsedWord, pickUnusedWord, pickUnusedWords, rememberWord, rememberWords } from '../utils/uniqueWords'
 
 const CATEGORIES = ['common', 'medium', 'hard']
 const SORT_LABELS = { common: 'Common', medium: 'Medium', hard: 'Hard' }
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
+const WORD_SEARCH_LENGTHS = [3, 4, 5, 6]
+const WORD_SEARCH_DIRECTIONS = [
+  [0, 1],
+  [1, 0],
+  [1, 1],
+  [1, -1],
+  [0, -1],
+  [-1, 0],
+  [-1, -1],
+  [-1, 1],
+]
 
 function pickWordEntries(level, count, options = {}) {
   const category = options.category || CATEGORIES[Math.floor((level - 1) / 4) % CATEGORIES.length]
@@ -78,6 +89,80 @@ function buildRhymeGroup(level) {
   }
 }
 
+function wordSearchTargetLengths(level) {
+  const target = level < 4 ? 6 : 7
+  const extras = [3, 4, 5, 6].slice((level - 1) % 4).concat([3, 4, 5, 6])
+  return [...WORD_SEARCH_LENGTHS, ...extras.slice(0, target - WORD_SEARCH_LENGTHS.length)]
+}
+
+function buildWordSearchPuzzle(level, size) {
+  const targetLengths = wordSearchTargetLengths(level)
+  const grid = Array.from({ length: size }, () => Array.from({ length: size }, () => ''))
+  const words = []
+  const placements = {}
+  const used = getUsedWords()
+
+  function canPlace(word, row, col, rowStep, colStep) {
+    return word.split('').every((letter, index) => {
+      const nextRow = row + rowStep * index
+      const nextCol = col + colStep * index
+      return nextRow >= 0 &&
+        nextRow < size &&
+        nextCol >= 0 &&
+        nextCol < size &&
+        (!grid[nextRow][nextCol] || grid[nextRow][nextCol] === letter)
+    })
+  }
+
+  function placeWord(word) {
+    const starts = shuffle(Array.from({ length: size * size }, (_, index) => ({
+      row: Math.floor(index / size),
+      col: index % size,
+    })))
+    for (const [rowStep, colStep] of shuffle(WORD_SEARCH_DIRECTIONS)) {
+      for (const { row, col } of starts) {
+        if (!canPlace(word, row, col, rowStep, colStep)) continue
+        const path = word.split('').map((letter, index) => {
+          const nextRow = row + rowStep * index
+          const nextCol = col + colStep * index
+          grid[nextRow][nextCol] = letter
+          return `${nextRow}-${nextCol}`
+        })
+        words.push(word)
+        placements[word] = path
+        used.add(word)
+        return true
+      }
+    }
+    return false
+  }
+
+  function placeFreshWord(length) {
+    const candidates = shuffle(ALL_WORDS
+      .filter(({ word, definition }) =>
+        definition &&
+        word.length === length &&
+        isValidWord(word) &&
+        !used.has(word)))
+      .map(({ word }) => word)
+    return candidates.some(placeWord)
+  }
+
+  targetLengths.forEach(placeFreshWord)
+  let refillAttempts = 0
+  while (words.length < targetLengths.length && refillAttempts < WORD_SEARCH_LENGTHS.length * 4) {
+    placeFreshWord(shuffle(WORD_SEARCH_LENGTHS)[0])
+    refillAttempts += 1
+  }
+
+  grid.forEach((row, rowIndex) => row.forEach((letter, colIndex) => {
+    if (!letter) grid[rowIndex][colIndex] = ALPHABET[Math.floor(Math.random() * ALPHABET.length)]
+  }))
+
+  rememberWords(words)
+  return { grid, words, placements, targetWords: words.length, targetLengths }
+}
+
 function scoreFor(words, bonus = 0) {
   return words.reduce((total, word) => total + String(word).length * 20, bonus)
 }
@@ -110,23 +195,24 @@ function TextAnswer({ value, onChange, onSubmit, placeholder = 'Type answer...' 
 
 function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   const size = 8
-  const targetWords = Math.min(8, 4 + Math.floor(level / 6))
   const [boardSeed, setBoardSeed] = useState(0)
-  const puzzle = useMemo(() => ({
-    seed: `${level}-${boardSeed}`,
-    grid: Array.from({ length: size }, () =>
-      Array.from({ length: size }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)])),
-  }), [boardSeed, level, size])
+  const puzzle = useMemo(() => buildWordSearchPuzzle(level, size), [boardSeed, level, size])
   const [selected, setSelected] = useState([])
   const [found, setFound] = useState([])
   const [foundPaths, setFoundPaths] = useState({})
   const score = scoreFor(found)
+  const foundLengths = [...new Set(found.map((word) => word.length))].sort((a, b) => a - b)
+  const foundLengthLabel = WORD_SEARCH_LENGTHS
+    .map((length) => `${length}${foundLengths.includes(length) ? '✓' : ''}`)
+    .join(' ')
+  const foundHasLengthMix = WORD_SEARCH_LENGTHS.every((length) => foundLengths.includes(length))
+  const wordSearchComplete = found.length >= puzzle.targetWords && foundHasLengthMix
 
   useEffect(() => {
     setSelected([])
     setFound([])
     setFoundPaths({})
-  }, [level])
+  }, [boardSeed, level])
 
   function getCellPosition(cell) {
     const [row, col] = cell.split('-').map(Number)
@@ -197,10 +283,13 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
   function submitWord() {
     const tracedWord = wordFromPath(selected)
     if (tracedWord.length < 3) return showToast('Words need at least three letters.', 'error')
+    if (tracedWord.length > 6) return showToast('Find words from 3 to 6 letters.', 'error')
     if (!isStraightPath(selected)) return showToast('Use one row, column, or diagonal line.', 'error')
     if (!isValidWord(tracedWord)) return showToast('Use a meaningful word.', 'error')
     if (found.includes(tracedWord)) return showToast('Already found.', 'info')
-    if (hasUsedWord(tracedWord)) return showToast('That word was already used in another puzzle.', 'error')
+    if (!puzzle.words.includes(tracedWord) && hasUsedWord(tracedWord)) {
+      return showToast('That word was already used in another puzzle.', 'error')
+    }
     rememberWord(tracedWord)
     const nextFound = [...found, tracedWord]
     const nextPaths = { ...foundPaths, [tracedWord]: selected }
@@ -208,13 +297,24 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
     setFoundPaths(nextPaths)
     setSelected([])
     showToast(`${tracedWord.toUpperCase()} found`, 'success')
-    if (nextFound.length >= targetWords) finishGame(onComplete, level, scoreFor(nextFound, 100))
+    const hasLengthMix = WORD_SEARCH_LENGTHS.every((length) =>
+      nextFound.some((word) => word.length === length))
+    if (nextFound.length >= puzzle.targetWords && hasLengthMix) {
+      finishGame(onComplete, level, scoreFor(nextFound, 100))
+    } else if (nextFound.length >= puzzle.targetWords) {
+      showToast('Find at least one 3, 4, 5, and 6-letter word.', 'info')
+    }
   }
 
   function refreshBoard() {
     setSelected([])
+    setFound([])
     setFoundPaths({})
     setBoardSeed((seed) => seed + 1)
+  }
+
+  if (puzzle.targetWords < 6) {
+    return <div className="game-panel"><p className="empty-state">No fresh word search board available.</p></div>
   }
 
   return (
@@ -222,8 +322,8 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
       <ScoreBar score={score} xp={getXPForLevel(level)} />
       <div className="status-row">
         <span className="neutral-status">Found</span>
-        <strong>{found.length}/{targetWords}</strong>
-        {selected.length > 0 && <span>{selected.length} selected</span>}
+        <strong>{found.length}/{puzzle.targetWords}</strong>
+        <span>{selected.length > 0 ? `${selected.length} selected` : foundLengthLabel}</span>
       </div>
       <div className="word-search-grid" style={{ gridTemplateColumns: `repeat(${size},1fr)` }}>
         {puzzle.grid.flatMap((row, rowIndex) => row.map((letter, colIndex) => {
@@ -237,9 +337,9 @@ function WordSearch({ level, onComplete, showToast, hapticsEnabled = true }) {
         }))}
       </div>
       <div className="word-search-actions">
-        <button className="btn-primary" onClick={submitWord} disabled={!selected.length || found.length >= targetWords}>SUBMIT WORD</button>
+        <button className="btn-primary" onClick={submitWord} disabled={!selected.length || wordSearchComplete}>SUBMIT WORD</button>
         <button className="btn-secondary" onClick={() => setSelected([])} disabled={!selected.length}>CLEAR SELECTION</button>
-        <button className="btn-secondary" onClick={refreshBoard} disabled={found.length >= targetWords}>NEW BOARD</button>
+        <button className="btn-secondary" onClick={refreshBoard} disabled={wordSearchComplete}>NEW BOARD</button>
       </div>
     </div>
   )
