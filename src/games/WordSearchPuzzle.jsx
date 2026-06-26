@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
 import { triggerHaptic } from '../utils/haptics'
-import { getXPForLevel, shuffle } from '../utils/wordUtils'
+import { getXPForLevel, shuffle, VALID_WORDS } from '../utils/wordUtils'
 import { getUsedWords, rememberWords } from '../utils/uniqueWords'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -23,6 +23,7 @@ const EASY_DIRECTIONS = [
   [1, 1],
   [1, -1],
 ]
+const TARGET_WORD_BANK_SIZE = 12000
 
 const DIFFICULTIES = {
   easy: { key: 'easy', label: 'Easy', rows: 8, cols: 8, wordCount: 6, allowBackwards: false },
@@ -63,6 +64,14 @@ const emptySelecting = {
 function cleanWord(word) {
   return String(word || '').toUpperCase().replace(/[^A-Z]/g, '')
 }
+
+const WORD_BANK = [...new Set(VALID_WORDS
+  .map(cleanWord)
+  .filter((word) =>
+    word.length >= 3 &&
+    word.length <= 8 &&
+    /[AEIOUY]/.test(word) &&
+    !/(.)\1\1/.test(word)))]
 
 function cellKey(cell) {
   return `${cell.row},${cell.col}`
@@ -172,19 +181,65 @@ function generateWordSearch(wordList, {
   return { grid: [], words: [] }
 }
 
-function buildPuzzle(theme, difficulty) {
-  const used = getUsedWords()
+function normalizeScopePart(value) {
+  return String(value || 'guest').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_') || 'guest'
+}
+
+function getPlayerWordScope(player, gameKey = 'wordsearchpuzzle') {
+  let fallback = 'guest'
+  try {
+    fallback = localStorage.getItem('wordmaster_current_user') || fallback
+  } catch {
+    // Keep generation available when storage is blocked.
+  }
+  const playerKey = player?.accountEmail || player?.username || fallback
+  return `${gameKey}_${normalizeScopePart(playerKey)}`
+}
+
+function pickPuzzleWords(theme, difficulty, level, scope) {
+  const used = getUsedWords(scope)
   const maxLength = Math.max(difficulty.rows, difficulty.cols)
-  const available = theme.words
-    .map(cleanWord)
+  const themeWords = shuffle(theme.words.map(cleanWord))
     .filter((word) => word.length <= maxLength && !used.has(word.toLowerCase()))
+  const dictionaryWords = WORD_BANK
+    .filter((word) => word.length <= maxLength && !used.has(word.toLowerCase()))
+  const levelOffset = dictionaryWords.length ? (level * difficulty.wordCount) % dictionaryWords.length : 0
+  const rotatedDictionary = dictionaryWords.slice(levelOffset).concat(dictionaryWords.slice(0, levelOffset))
+  const themeTarget = Math.min(themeWords.length, Math.max(1, Math.floor(difficulty.wordCount / 3)))
+  const candidates = [
+    ...themeWords.slice(0, themeTarget),
+    ...shuffle(rotatedDictionary).slice(0, Math.max(TARGET_WORD_BANK_SIZE, difficulty.wordCount * 80)),
+    ...themeWords.slice(themeTarget),
+  ]
+  const picked = []
+  const seen = new Set()
+
+  for (const word of candidates) {
+    if (!word || seen.has(word) || used.has(word.toLowerCase())) continue
+    picked.push(word)
+    seen.add(word)
+    if (picked.length >= difficulty.wordCount) break
+  }
+
+  return picked
+}
+
+function buildPuzzle(theme, difficulty, level, player, gameKey) {
+  const scope = getPlayerWordScope(player, gameKey)
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const chosenWords = shuffle(available).slice(0, difficulty.wordCount)
+    const chosenWords = pickPuzzleWords(theme, difficulty, level + attempt, scope)
     const puzzle = generateWordSearch(chosenWords, difficulty)
     if (puzzle.words.length >= 4) {
-      rememberWords(puzzle.words.map(({ text }) => text))
+      rememberWords(puzzle.words.map(({ text }) => text), scope)
       return puzzle
     }
+  }
+
+  const fallbackWords = shuffle(WORD_BANK).slice(0, difficulty.wordCount)
+  const fallbackPuzzle = generateWordSearch(fallbackWords, difficulty)
+  if (fallbackPuzzle.words.length >= 4) {
+    rememberWords(fallbackPuzzle.words.map(({ text }) => text), scope)
+    return fallbackPuzzle
   }
   return { grid: [], words: [] }
 }
@@ -206,7 +261,7 @@ function lineStyle(cells, rows, cols) {
   }
 }
 
-function WordSearchPuzzle({ level, onComplete, hapticsEnabled = true }) {
+function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, onComplete, hapticsEnabled = true }) {
   const [phase, setPhase] = useState('difficulty')
   const [difficulty, setDifficulty] = useState(null)
   const [theme, setTheme] = useState(null)
@@ -238,7 +293,7 @@ function WordSearchPuzzle({ level, onComplete, hapticsEnabled = true }) {
   }, [phase])
 
   function startPuzzle(nextDifficulty = difficulty, nextTheme = theme) {
-    const puzzle = buildPuzzle(nextTheme, nextDifficulty)
+    const puzzle = buildPuzzle(nextTheme, nextDifficulty, level, player, gameKey)
     setDifficulty(nextDifficulty)
     setTheme(nextTheme)
     setGrid(puzzle.grid)
@@ -379,9 +434,9 @@ function WordSearchPuzzle({ level, onComplete, hapticsEnabled = true }) {
     return (
       <div className="game-panel wsp-shell">
         <section className="result-panel">
-          <p className="eyebrow">No board</p>
-          <strong>Fresh words ran out</strong>
-          <button className="btn-primary" onClick={() => setPhase('theme')}>CHOOSE THEME</button>
+          <p className="eyebrow">Board reset</p>
+          <strong>Preparing fresh words</strong>
+          <button className="btn-primary" onClick={() => startPuzzle(difficulty, theme)}>TRY AGAIN</button>
         </section>
       </div>
     )

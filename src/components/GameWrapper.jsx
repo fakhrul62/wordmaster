@@ -196,6 +196,7 @@ function GameWrapper({
   gameKey,
   level,
   mode = null,
+  player = null,
   gameProgress = null,
   unlockedLevel = level,
   onBack,
@@ -370,6 +371,8 @@ function GameWrapper({
           <Game
             key={`${gameKey}-${selectedLevel}`}
             level={selectedLevel}
+            gameKey={gameKey}
+            player={player}
             minimumLength={gameKey === 'boggle' ? selectedMode : undefined}
             onComplete={finish}
             showToast={showToast}

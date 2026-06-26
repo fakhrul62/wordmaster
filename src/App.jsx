@@ -181,6 +181,7 @@ function App() {
           gameKey={gameParams.gameKey}
           level={gameParams.level}
           mode={gameParams.mode}
+          player={player}
           gameProgress={player.games[gameParams.gameKey]}
           unlockedLevel={Math.max(
             getGameTrack(player.games[gameParams.gameKey], gameParams.gameKey, gameParams.mode).level,
