@@ -9,6 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,json,png,svg,woff2}'],
         runtimeCaching: [{
           urlPattern: /^https:\/\/wordmaster-iota\.vercel\.app\/api\//,
