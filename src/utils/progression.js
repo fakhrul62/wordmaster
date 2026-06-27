@@ -4,6 +4,13 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const PLAYER_LEVEL_XP = 140
 const MAX_VISIBLE_LEVELS = 12
 export const BOGGLE_MODES = [3, 4, 5, 6]
+export const DIFFICULTIES = ['easy', 'normal', 'hard']
+
+export const DIFFICULTY_XP_MULTIPLIERS = {
+  easy: 0.8,
+  normal: 1,
+  hard: 1.35,
+}
 
 const TITLE_TIERS = [
   { id: 'beginner_explorer', title: 'Beginner Explorer', xp: 0 },
@@ -176,6 +183,9 @@ function createModeProgress(existing = {}) {
     clears: Math.max(0, Number(existing.clears) || 0),
     bestTime: normalizeBestTime(existing.bestTime),
     completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
+    difficulty: DIFFICULTIES.includes(existing.difficulty) ? existing.difficulty : 'normal',
+    timerMode: existing.timerMode !== false,
+    activePack: typeof existing.activePack === 'string' ? existing.activePack : 'default',
   }
 }
 
@@ -234,6 +244,23 @@ export function getPlayerLevel(totalXP = 0) {
 
 export function getTitleForXP(totalXP = 0) {
   return TITLE_TIERS.reduce((current, tier) => (totalXP >= tier.xp ? tier : current), TITLE_TIERS[0]).title
+}
+
+export function getStreakMultiplier(count) {
+  if (count >= 14) return 2
+  if (count >= 7) return 1.5
+  if (count >= 3) return 1.25
+  if (count >= 1) return 1.1
+  return 1
+}
+
+export function getDifficultyMultiplier(difficulty = 'normal') {
+  return DIFFICULTY_XP_MULTIPLIERS[difficulty] || DIFFICULTY_XP_MULTIPLIERS.normal
+}
+
+export function getRunXPMultiplier({ difficulty = 'normal', timerMode = true, streakCount = 0 } = {}) {
+  const modeMultiplier = timerMode === false ? 0.6 : 1
+  return modeMultiplier * getDifficultyMultiplier(difficulty) * getStreakMultiplier(streakCount)
 }
 
 function streakReward(count) {
@@ -467,11 +494,26 @@ function updateEvent(player, gameKey, score, didClear) {
 export function applyProgressUpdate(
   current,
   gameKey,
-  { score = 0, levelReached = 1, xpEarned = 0, mode = null, completionTime = null },
+  {
+    score = 0,
+    levelReached = 1,
+    xpEarned = 0,
+    mode = null,
+    completionTime = null,
+    difficulty = null,
+    timerMode = true,
+    activePack = 'default',
+  },
 ) {
   const trackMode = gameKey === 'boggle' && BOGGLE_MODES.includes(Number(mode)) ? Number(mode) : null
   const currentGame = current.games[gameKey] || createGameProgress({}, gameKey)
   const currentTrack = getGameTrack(currentGame, gameKey, trackMode)
+  const activeDifficulty = DIFFICULTIES.includes(difficulty) ? difficulty : currentTrack.difficulty
+  const activeTimerMode = timerMode !== false
+  const difficultyMultiplier = getDifficultyMultiplier(activeDifficulty)
+  const streakMultiplier = getStreakMultiplier(current.streak?.count || 0)
+  const timerMultiplier = activeTimerMode ? 1 : 0.6
+  const adjustedXP = Math.max(0, Math.round(xpEarned * difficultyMultiplier * streakMultiplier * timerMultiplier))
   const didClear = levelReached > currentTrack.level || score > 0
   const completedLevel = Math.max(1, levelReached - 1)
   const completedLevels = [...new Set([...currentTrack.completedLevels, completedLevel])].sort((a, b) => a - b)
@@ -479,12 +521,15 @@ export function applyProgressUpdate(
     ...currentTrack,
     level: Math.max(currentTrack.level, levelReached),
     highScore: Math.max(currentTrack.highScore, score),
-    xp: currentTrack.xp + xpEarned,
+    xp: currentTrack.xp + adjustedXP,
     clears: currentTrack.clears + (didClear ? 1 : 0),
     bestTime: gameKey === 'boggle'
       ? betterBestTime(currentTrack.bestTime, completionTime)
       : currentTrack.bestTime,
     completedLevels,
+    difficulty: activeDifficulty,
+    timerMode: activeTimerMode,
+    activePack,
   }
   const nextGame = gameKey === 'boggle' && trackMode
     ? {
@@ -497,14 +542,14 @@ export function applyProgressUpdate(
         level: Math.max(...BOGGLE_MODES.map((item) =>
           item === trackMode ? nextTrack.level : getGameTrack(currentGame, gameKey, item).level)),
         highScore: Math.max(currentGame.highScore || 0, score),
-        xp: (currentGame.xp || 0) + xpEarned,
+        xp: (currentGame.xp || 0) + adjustedXP,
         clears: (currentGame.clears || 0) + (didClear ? 1 : 0),
         bestTime: betterBestTime(currentGame.bestTime, nextTrack.bestTime),
       }
     : nextTrack
   let nextPlayer = {
     ...current,
-    totalXP: current.totalXP + xpEarned,
+    totalXP: current.totalXP + adjustedXP,
     totalPoints: current.totalPoints + score,
     gamesPlayed: current.gamesPlayed + 1,
     lastPlayed: todayKey(),
@@ -515,9 +560,16 @@ export function applyProgressUpdate(
   }
 
   const dailyUpdate = updateDailyChallenges(nextPlayer, gameKey, score, didClear)
+  if (!activeTimerMode) {
+    dailyUpdate.bonus = {
+      ...dailyUpdate.bonus,
+      points: 0,
+    }
+  }
+  const packBonusCoins = activePack && activePack !== 'default' && dailyUpdate.completedNow ? 10 : 0
   const eventUpdate = updateEvent(nextPlayer, gameKey, score, didClear)
   const totalBonus = {
-    coins: dailyUpdate.bonus.coins + eventUpdate.bonus.coins,
+    coins: dailyUpdate.bonus.coins + eventUpdate.bonus.coins + packBonusCoins,
     xp: dailyUpdate.bonus.xp + eventUpdate.bonus.xp,
     points: dailyUpdate.bonus.points + eventUpdate.bonus.points,
   }
@@ -527,7 +579,7 @@ export function applyProgressUpdate(
       id: `daily-${todayKey()}-${Date.now()}`,
       type: 'daily',
       title: `${dailyUpdate.completedNow} daily challenge${dailyUpdate.completedNow > 1 ? 's' : ''}`,
-      detail: `+${dailyUpdate.bonus.coins} coins, +${dailyUpdate.bonus.xp} XP`,
+      detail: `+${dailyUpdate.bonus.coins + packBonusCoins} coins, +${dailyUpdate.bonus.xp} XP`,
       date: todayKey(),
     })
   }
@@ -551,6 +603,17 @@ export function applyProgressUpdate(
     daily: dailyUpdate.daily,
     events: eventUpdate.events,
     recentUnlocks: [...unlocks, ...nextPlayer.recentUnlocks].slice(0, 8),
+    lastRun: {
+      gameKey,
+      baseXP: xpEarned,
+      xpEarned: adjustedXP,
+      difficulty: activeDifficulty,
+      difficultyMultiplier,
+      streakMultiplier,
+      timerMultiplier,
+      relaxed: !activeTimerMode,
+      activePack,
+    },
   }
 
   return applyAchievementUnlocks(nextPlayer)

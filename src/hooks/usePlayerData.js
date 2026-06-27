@@ -5,6 +5,7 @@ import {
   BOGGLE_MODES,
   createGameProgress,
   createGames,
+  DIFFICULTIES,
   getTitleForXP,
   refreshDailyEngagement,
   todayKey,
@@ -21,6 +22,9 @@ function createPlayer(username = GUEST_NAME, accountEmail = '') {
     totalXP: 0,
     totalPoints: 0,
     coins: 0,
+    unlockedPacks: [],
+    notificationsEnabled: false,
+    pushSubscription: null,
     gamesPlayed: 0,
     dailyChallengesCompleted: 0,
     eventMissionsCompleted: 0,
@@ -68,6 +72,9 @@ function normalizePlayer(player, fallbackUsername = GUEST_NAME, accountEmail = '
     totalXP,
     totalPoints: Math.max(0, Number(player?.totalPoints) || Number(player?.totalXP) || 0),
     coins: Math.max(0, Number(player?.coins) || 0),
+    unlockedPacks: Array.isArray(player?.unlockedPacks) ? player.unlockedPacks : [],
+    notificationsEnabled: Boolean(player?.notificationsEnabled),
+    pushSubscription: player?.pushSubscription || null,
     gamesPlayed: Math.max(0, Number(player?.gamesPlayed) || 0),
     dailyChallengesCompleted: Math.max(0, Number(player?.dailyChallengesCompleted) || 0),
     eventMissionsCompleted: Math.max(0, Number(player?.eventMissionsCompleted) || 0),
@@ -205,7 +212,37 @@ export function usePlayerData() {
     return synced
   }, [player])
 
-  const saveProgress = useCallback((gameKey, { score, levelReached, xpEarned, mode, completionTime }) => {
+  const persistPlayer = useCallback((next) => {
+    try {
+      writeCurrentPlayer(next)
+    } catch {
+      setStorageWarning(true)
+    }
+    if (next.accountEmail) {
+      setSyncStatus('syncing')
+      syncAccount(next.accountEmail, next)
+        .then((synced) => {
+          setPlayer(synced)
+          setSyncStatus('synced')
+          writeCurrentPlayer(synced)
+        })
+        .catch((error) => {
+          setSyncStatus('error')
+          setSyncError(error.message)
+        })
+    }
+  }, [])
+
+  const saveProgress = useCallback((gameKey, {
+    score,
+    levelReached,
+    xpEarned,
+    mode,
+    completionTime,
+    difficulty,
+    timerMode,
+    activePack,
+  }) => {
     setPlayer((current) => {
       if (!current) return current
       const next = applyProgressUpdate(current, gameKey, {
@@ -214,28 +251,14 @@ export function usePlayerData() {
         xpEarned,
         mode,
         completionTime,
+        difficulty,
+        timerMode,
+        activePack,
       })
-      try {
-        writeCurrentPlayer(next)
-      } catch {
-        setStorageWarning(true)
-      }
-      if (next.accountEmail) {
-        setSyncStatus('syncing')
-        syncAccount(next.accountEmail, next)
-          .then((synced) => {
-            setPlayer(synced)
-            setSyncStatus('synced')
-            writeCurrentPlayer(synced)
-          })
-          .catch((error) => {
-            setSyncStatus('error')
-            setSyncError(error.message)
-          })
-      }
+      persistPlayer(next)
       return next
     })
-  }, [])
+  }, [persistPlayer])
 
   const selectGameMode = useCallback((gameKey, mode) => {
     if (gameKey !== 'boggle' || !BOGGLE_MODES.includes(Number(mode))) return
@@ -274,6 +297,75 @@ export function usePlayerData() {
     })
   }, [])
 
+  const updateGamePreference = useCallback((gameKey, patch, mode = null) => {
+    setPlayer((current) => {
+      if (!current) return current
+      const currentGame = current.games[gameKey] || createGameProgress({}, gameKey)
+      const trackMode = gameKey === 'boggle' && BOGGLE_MODES.includes(Number(mode || currentGame.selectedMode))
+        ? Number(mode || currentGame.selectedMode)
+        : null
+      const nextGame = trackMode
+        ? {
+            ...currentGame,
+            selectedMode: trackMode,
+            modes: {
+              ...currentGame.modes,
+              [trackMode]: {
+                ...currentGame.modes[trackMode],
+                ...patch,
+              },
+            },
+          }
+        : {
+            ...currentGame,
+            ...patch,
+          }
+      const next = {
+        ...current,
+        games: {
+          ...current.games,
+          [gameKey]: nextGame,
+        },
+      }
+      persistPlayer(next)
+      return next
+    })
+  }, [persistPlayer])
+
+  const selectDifficulty = useCallback((gameKey, difficulty, mode = null) => {
+    if (!DIFFICULTIES.includes(difficulty)) return
+    updateGamePreference(gameKey, { difficulty }, mode)
+  }, [updateGamePreference])
+
+  const selectTimerMode = useCallback((gameKey, timerMode, mode = null) => {
+    updateGamePreference(gameKey, { timerMode: timerMode !== false }, mode)
+  }, [updateGamePreference])
+
+  const selectWordPack = useCallback((gameKey, activePack = 'default', mode = null) => {
+    updateGamePreference(gameKey, { activePack }, mode)
+  }, [updateGamePreference])
+
+  const spendCoins = useCallback((amount) => {
+    const cost = Math.max(0, Number(amount) || 0)
+    if (!player || player.coins < cost) return false
+    const next = { ...player, coins: player.coins - cost }
+    setPlayer(next)
+    persistPlayer(next)
+    return true
+  }, [persistPlayer, player])
+
+  const unlockWordPack = useCallback((packId, cost) => {
+    if (!player || player.unlockedPacks.includes(packId) || player.coins < cost) return false
+    const next = {
+      ...player,
+      coins: player.coins - cost,
+      unlockedPacks: [...player.unlockedPacks, packId],
+    }
+    setPlayer(next)
+    persistPlayer(next)
+    return true
+  }, [persistPlayer, player])
+
   const switchPlayer = useCallback(() => {
     setPlayer(null)
     try {
@@ -299,6 +391,11 @@ export function usePlayerData() {
     selectPlayer,
     saveProgress,
     selectGameMode,
+    selectDifficulty,
+    selectTimerMode,
+    selectWordPack,
+    spendCoins,
+    unlockWordPack,
     connectAccount,
     switchPlayer,
     getLeaderboard,

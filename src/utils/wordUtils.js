@@ -1,4 +1,5 @@
 import wordData from '../data/words.json'
+import { WORD_PACKS } from '../data/wordPacks'
 import englishWords from 'an-array-of-english-words'
 
 export const ALL_WORDS = wordData.words
@@ -34,6 +35,26 @@ export const getWordleAnswerCandidates = (length) => {
   return (preferred.length ? preferred : fallback)
     .map(({ word }) => word)
     .filter(isPlayableDictionaryWord)
+}
+export function getWordsForPack(packId = 'default', baseWords = ALL_WORDS) {
+  const pack = WORD_PACKS.find((item) => item.id === packId)
+  if (!pack || packId === 'default') return baseWords
+  const packedEntries = pack.words.map((word) => ({
+    word,
+    length: word.length,
+    category: 'pack',
+    clue: '',
+    definition: '',
+    anagrams: [],
+    shrinkChain: [],
+  }))
+  const seen = new Set()
+  return [...baseWords, ...packedEntries].filter((entry) => {
+    const key = typeof entry === 'string' ? entry : entry.word
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 export const shuffle = (items) => [...items].sort(() => Math.random() - 0.5)
 export const getAnagramWords = (minimum = 1) =>

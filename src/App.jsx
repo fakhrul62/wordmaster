@@ -5,16 +5,23 @@ import SettingsScreen from './components/SettingsScreen'
 import Toast from './components/Toast'
 import UserSetup from './components/UserSetup'
 import { usePlayerData } from './hooks/usePlayerData'
+import { readSoundPreference, writeSoundPreference } from './utils/audio'
+import { readHapticsPreference, writeHapticsPreference } from './utils/haptics'
 import { getGameTrack } from './utils/progression'
 
-const DEFAULT_THEME = { mode: 'dark', color: 'violet' }
+const DEFAULT_THEME = { mode: 'dark', color: 'violet', soundEnabled: true, hapticsEnabled: true }
 const ROUTE_STORAGE_KEY = 'wordmaster_route'
 
 function readThemeSettings() {
   try {
-    return { ...DEFAULT_THEME, ...JSON.parse(localStorage.getItem('wordmaster_theme') || '{}') }
+    return {
+      ...DEFAULT_THEME,
+      ...JSON.parse(localStorage.getItem('wordmaster_theme') || '{}'),
+      soundEnabled: readSoundPreference(),
+      hapticsEnabled: readHapticsPreference(),
+    }
   } catch {
-    return DEFAULT_THEME
+    return { ...DEFAULT_THEME, soundEnabled: readSoundPreference(), hapticsEnabled: readHapticsPreference() }
   }
 }
 
@@ -48,7 +55,8 @@ function App() {
   const [toast, setToast] = useState(null)
   const [themeSettings, setThemeSettings] = useState(readThemeSettings)
   const {
-    player, selectPlayer, saveProgress, selectGameMode, connectAccount, switchPlayer, getLeaderboard,
+    player, selectPlayer, saveProgress, selectGameMode, selectDifficulty, selectTimerMode, selectWordPack,
+    spendCoins, connectAccount, switchPlayer, getLeaderboard,
     syncStatus, syncError, storageWarning,
   } = usePlayerData()
 
@@ -119,6 +127,8 @@ function App() {
     const root = document.documentElement
     root.dataset.theme = themeSettings.mode
     root.dataset.color = themeSettings.color
+    writeSoundPreference(themeSettings.soundEnabled)
+    writeHapticsPreference(themeSettings.hapticsEnabled)
     try {
       localStorage.setItem('wordmaster_theme', JSON.stringify(themeSettings))
     } catch {
@@ -143,6 +153,9 @@ function App() {
       xpEarned,
       mode,
       completionTime: options.completionTime,
+      difficulty: options.difficulty,
+      timerMode: options.timerMode,
+      activePack: options.activePack,
     })
     navigate('game', { gameKey, level: nextLevel, mode }, { replace: true })
   }
@@ -182,6 +195,7 @@ function App() {
           level={gameParams.level}
           mode={gameParams.mode}
           player={player}
+          settings={themeSettings}
           gameProgress={player.games[gameParams.gameKey]}
           unlockedLevel={Math.max(
             getGameTrack(player.games[gameParams.gameKey], gameParams.gameKey, gameParams.mode).level,
@@ -193,6 +207,10 @@ function App() {
             selectGameMode(gameParams.gameKey, mode)
             navigate('game', { gameKey: gameParams.gameKey, level: modeLevel, mode }, { replace: true })
           }}
+          onDifficultySelect={selectDifficulty}
+          onTimerModeSelect={selectTimerMode}
+          onPackSelect={selectWordPack}
+          spendCoins={spendCoins}
           onComplete={(score, xpEarned, nextLevel, options) =>
             handleGameComplete(gameParams.gameKey, score, xpEarned, nextLevel, options)}
           showToast={showToast}

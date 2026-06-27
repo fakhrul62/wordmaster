@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { writeSoundPreference } from '../utils/audio'
+import { writeHapticsPreference } from '../utils/haptics'
 
 const MODE_OPTIONS = [
   { key: 'dark', label: 'Dark' },
@@ -20,6 +22,16 @@ function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStat
 
   function update(partial) {
     onChange((current) => ({ ...current, ...partial }))
+  }
+
+  function setSound(enabled) {
+    writeSoundPreference(enabled)
+    update({ soundEnabled: enabled })
+  }
+
+  function setHaptics(enabled) {
+    writeHapticsPreference(enabled)
+    update({ hapticsEnabled: enabled })
   }
 
   async function submitAccount(event) {
@@ -83,6 +95,36 @@ function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStat
                   aria-pressed={settings.mode === option.key}
                 >
                   {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="settings-group">
+            <h3>Sound</h3>
+            <div className="segmented-control">
+              {[true, false].map((enabled) => (
+                <button
+                  className={settings.soundEnabled === enabled ? 'selected' : ''}
+                  key={enabled ? 'sound-on' : 'sound-off'}
+                  onClick={() => setSound(enabled)}
+                  aria-pressed={settings.soundEnabled === enabled}
+                >
+                  {enabled ? 'ON' : 'OFF'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="settings-group">
+            <h3>Haptics</h3>
+            <div className="segmented-control">
+              {[true, false].map((enabled) => (
+                <button
+                  className={settings.hapticsEnabled === enabled ? 'selected' : ''}
+                  key={enabled ? 'haptics-on' : 'haptics-off'}
+                  onClick={() => setHaptics(enabled)}
+                  aria-pressed={settings.hapticsEnabled === enabled}
+                >
+                  {enabled ? 'ON' : 'OFF'}
                 </button>
               ))}
             </div>

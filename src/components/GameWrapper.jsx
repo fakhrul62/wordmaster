@@ -1,8 +1,17 @@
 import LevelBadge from './LevelBadge'
+import DifficultyPicker from './DifficultyPicker'
 import { useEffect, useRef, useState } from 'react'
-import { readHapticsPreference, triggerHaptic, writeHapticsPreference } from '../utils/haptics'
+import { playSound } from '../utils/audio'
+import { triggerHaptic } from '../utils/haptics'
 import { GAME_NAMES } from '../data/gameCatalog'
-import { BOGGLE_MODES, getGameTrack, getLevelMap } from '../utils/progression'
+import { WORD_PACKS } from '../data/wordPacks'
+import {
+  BOGGLE_MODES,
+  getGameTrack,
+  getLevelMap,
+  getRunXPMultiplier,
+  getStreakMultiplier,
+} from '../utils/progression'
 import Wordchain from '../games/Wordchain'
 import AnagramVault from '../games/AnagramVault'
 import CrossClue from '../games/CrossClue'
@@ -53,6 +62,19 @@ const GAME_COMPONENTS = {
   anagrambattle: AnagramBattle,
   wordmaze: WordMaze,
   rhymetime: RhymeTime,
+}
+
+const HINTS = {
+  wordle: { label: 'Reveal one correct letter in its slot', effect: 'One correct slot is safe to inspect.', cost: 15 },
+  boggle: { label: 'Flash a valid word path', effect: 'Look for a short valid path on the board.', cost: 20 },
+  anagramvault: { label: 'Reveal one letter in position', effect: 'One answer position is revealed.', cost: 12 },
+  crossclue: { label: 'Fill one crossword cell', effect: 'A crossing cell hint is available.', cost: 18 },
+  letterlock: { label: 'Highlight one valid word', effect: 'A valid word is highlighted.', cost: 15 },
+  wordshrink: { label: 'Show next valid word', effect: 'The next shrink target is hinted.', cost: 15 },
+  typingsprint: { label: 'Skip current word', effect: 'Skip is available with no penalty.', cost: 10 },
+  wordsearch: { label: 'Circle one hidden word start cell', effect: 'A starting cell is highlighted.', cost: 12 },
+  wordsearchpuzzle: { label: 'Circle one hidden word start cell', effect: 'A starting cell is highlighted.', cost: 12 },
+  wordchain: { label: 'Show a valid next word', effect: 'A valid next word is hinted.', cost: 15 },
 }
 
 const GAME_RULES = {
@@ -197,25 +219,38 @@ function GameWrapper({
   level,
   mode = null,
   player = null,
+  settings = {},
   gameProgress = null,
   unlockedLevel = level,
   onBack,
   onHome,
   onModeSelect,
+  onDifficultySelect,
+  onTimerModeSelect,
+  onPackSelect,
+  spendCoins,
   onComplete,
   showToast,
 }) {
   const [result, setResult] = useState(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
-  const [hapticsEnabled, setHapticsEnabled] = useState(readHapticsPreference)
+  const hapticsEnabled = settings.hapticsEnabled !== false
+  const soundEnabled = settings.soundEnabled !== false
   const [selectedLevel, setSelectedLevel] = useState(level)
   const [selectedMode, setSelectedMode] = useState(Number(mode || gameProgress?.selectedMode || 3))
   const [levelSelectionOpen, setLevelSelectionOpen] = useState(true)
   const [rulesAccepted, setRulesAccepted] = useState(false)
+  const [hintOpen, setHintOpen] = useState(false)
+  const [hintsUsed, setHintsUsed] = useState(0)
   const previousGameKey = useRef(gameKey)
   const Game = GAME_COMPONENTS[gameKey]
   const rules = GAME_RULES[gameKey]
   const activeTrack = getGameTrack(gameProgress, gameKey, gameKey === 'boggle' ? selectedMode : null)
+  const difficulty = activeTrack.difficulty || 'normal'
+  const timerMode = activeTrack.timerMode !== false
+  const activePack = activeTrack.activePack || 'default'
+  const streakMultiplier = getStreakMultiplier(player?.streak?.count || 0)
+  const xpMultiplier = getRunXPMultiplier({ difficulty, timerMode, streakCount: player?.streak?.count || 0 })
   const activeUnlockedLevel = gameKey === 'boggle' ? Math.max(activeTrack.level, selectedLevel) : unlockedLevel
   const visibleLevels = getLevelMap(activeUnlockedLevel)
 
@@ -227,6 +262,8 @@ function GameWrapper({
     setSelectedLevel(level)
     setLevelSelectionOpen(true)
     setRulesAccepted(false)
+    setHintsUsed(0)
+    setHintOpen(false)
   }, [gameKey, gameProgress, level, mode])
 
   useEffect(() => {
@@ -237,15 +274,6 @@ function GameWrapper({
   useEffect(() => {
     setSelectedLevel(level)
   }, [level])
-
-  function toggleHaptics() {
-    setHapticsEnabled((enabled) => {
-      const next = !enabled
-      writeHapticsPreference(next)
-      triggerHaptic(next, 20)
-      return next
-    })
-  }
 
   function leaveGame() {
     if (result) {
@@ -264,9 +292,20 @@ function GameWrapper({
   }
 
   function finish(score, xp, nextLevel, details = {}) {
+    const currentTrack = getGameTrack(gameProgress, gameKey, gameKey === 'boggle' ? selectedMode : null)
+    if (nextLevel > currentTrack.level) {
+      playSound('level_up', soundEnabled)
+      triggerHaptic(hapticsEnabled, [30, 20, 30])
+    } else if (score > 0) {
+      playSound('correct', soundEnabled)
+      triggerHaptic(hapticsEnabled, 18)
+    }
     onComplete(score, xp, nextLevel, {
       ...details,
       mode: gameKey === 'boggle' ? selectedMode : null,
+      difficulty,
+      timerMode,
+      activePack,
     })
     setSelectedLevel(nextLevel)
     setLevelSelectionOpen(false)
@@ -291,6 +330,26 @@ function GameWrapper({
   function startSelectedLevel() {
     if (gameKey === 'boggle') onModeSelect?.(selectedMode, selectedLevel)
     setLevelSelectionOpen(false)
+    setHintsUsed(0)
+    setHintOpen(false)
+  }
+
+  function useHint() {
+    const cost = HINTS[gameKey]?.cost || 15
+    if (hintsUsed >= 3) {
+      showToast?.('Maximum 3 hints per run.', 'info')
+      return
+    }
+    if (!spendCoins?.(cost)) {
+      showToast?.('Not enough coins.', 'error')
+      playSound('wrong', soundEnabled)
+      return
+    }
+    setHintsUsed((value) => value + 1)
+    setHintOpen(false)
+    playSound('coin', soundEnabled)
+    triggerHaptic(hapticsEnabled, 18)
+    showToast?.(HINTS[gameKey]?.effect || 'Hint unlocked for this run.', 'success')
   }
 
   return (
@@ -300,14 +359,6 @@ function GameWrapper({
         <h1 className="game-topbar-title">{GAME_NAMES[gameKey]}</h1>
         <div className="game-topbar-actions">
           <button className="home-icon-button" onClick={onHome} aria-label="Go home">⌂</button>
-          <button
-            className={`haptic-toggle ${hapticsEnabled ? 'enabled' : ''}`}
-            onClick={toggleHaptics}
-            aria-pressed={hapticsEnabled}
-            aria-label={`Haptic feedback ${hapticsEnabled ? 'on' : 'off'}`}
-          >
-            {hapticsEnabled ? 'VIB ON' : 'VIB OFF'}
-          </button>
           <LevelBadge level={selectedLevel} />
         </div>
       </header>
@@ -333,6 +384,16 @@ function GameWrapper({
                 })}
               </div>
             )}
+            <DifficultyPicker
+              difficulty={difficulty}
+              timerMode={timerMode}
+              activePack={activePack}
+              unlockedPacks={player?.unlockedPacks || []}
+              packs={WORD_PACKS}
+              onDifficultyChange={(value) => onDifficultySelect?.(gameKey, value, gameKey === 'boggle' ? selectedMode : null)}
+              onTimerModeChange={(value) => onTimerModeSelect?.(gameKey, value, gameKey === 'boggle' ? selectedMode : null)}
+              onPackChange={(value) => onPackSelect?.(gameKey, value, gameKey === 'boggle' ? selectedMode : null)}
+            />
             <div className="level-select-summary">
               <span><small>{gameKey === 'boggle' ? `${selectedMode}+ track` : 'Current'}</small><strong>LV {activeUnlockedLevel}</strong></span>
               <span><small>Next unlock</small><strong>LV {activeUnlockedLevel + 1}</strong></span>
@@ -368,16 +429,47 @@ function GameWrapper({
             <button className="btn-primary" onClick={() => setRulesAccepted(true)}>START</button>
           </section>
         ) : Game ? (
-          <Game
-            key={`${gameKey}-${selectedLevel}`}
-            level={selectedLevel}
-            gameKey={gameKey}
-            player={player}
-            minimumLength={gameKey === 'boggle' ? selectedMode : undefined}
-            onComplete={finish}
-            showToast={showToast}
-            hapticsEnabled={hapticsEnabled}
-          />
+          <>
+            <div className="game-hud-row">
+              <span className="hud-badge">{timerMode ? 'Timed' : 'No time limit'}</span>
+              <span className="hud-badge">x{xpMultiplier.toFixed(2).replace(/\.00$/, '')} XP</span>
+              {streakMultiplier > 1 && <span className="hud-badge streak">🔥 x{streakMultiplier.toFixed(2).replace(/\.00$/, '')}</span>}
+              <div className="hint-menu">
+                <button
+                  className="hint-button"
+                  onClick={() => setHintOpen((open) => !open)}
+                  disabled={!player?.coins}
+                  title={player?.coins ? 'Use a hint' : 'Earn coins by completing daily challenges'}
+                  aria-label="Use a hint"
+                >
+                  💡
+                </button>
+                {hintOpen && (
+                  <div className="hint-popover">
+                    <strong>{HINTS[gameKey]?.label || 'Reveal one answer element'}</strong>
+                    <small>{HINTS[gameKey]?.cost || 15} coins · {3 - hintsUsed} left</small>
+                    <button className="btn-primary" onClick={useHint}>USE HINT</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Game
+              key={`${gameKey}-${selectedLevel}-${difficulty}-${timerMode}-${activePack}`}
+              level={selectedLevel}
+              gameKey={gameKey}
+              player={player}
+              minimumLength={gameKey === 'boggle' ? selectedMode : undefined}
+              difficulty={difficulty}
+              timerMode={timerMode}
+              activePack={activePack}
+              xpMultiplier={xpMultiplier}
+              streakMultiplier={streakMultiplier}
+              onComplete={finish}
+              showToast={showToast}
+              hapticsEnabled={hapticsEnabled}
+              soundEnabled={soundEnabled}
+            />
+          </>
         ) : (
           <div className="game-placeholder"><h1>{GAME_NAMES[gameKey]}</h1><p>Coming in the next build step.</p></div>
         )}
@@ -391,6 +483,13 @@ function GameWrapper({
             <span>+{result.xp} XP</span>
             {result.completionTime && <span>{formatResultTime(result.completionTime)}</span>}
           </div>
+          {player?.lastRun?.gameKey === gameKey && (
+            <p className="xp-breakdown">
+              Base XP: {player.lastRun.baseXP} · x{player.lastRun.streakMultiplier.toFixed(2).replace(/\.00$/, '')} streak · x{player.lastRun.difficultyMultiplier.toFixed(2).replace(/\.00$/, '')} {player.lastRun.difficulty} · x{player.lastRun.timerMultiplier.toFixed(2).replace(/\.00$/, '')} mode = {player.lastRun.xpEarned} XP
+            </p>
+          )}
+          {player?.lastRun?.relaxed && <p className="relaxed-label">Relaxed Run</p>}
+          {player?.coins === 0 && <p className="empty-state">Complete daily challenges to earn coins for hints.</p>}
           <div className="btn-row">
             <button className="btn-primary" onClick={() => setResult(null)}>NEXT LEVEL</button>
             <button className="btn-secondary" onClick={onBack}>HOME</button>
