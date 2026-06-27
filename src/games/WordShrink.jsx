@@ -1,10 +1,20 @@
 import { useMemo, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getShrinkableWords, getXPForLevel, isValidWord, VALID_WORDS } from '../utils/wordUtils'
 import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
-function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
+function WordShrink({
+  level,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  xpMultiplier = 1,
+  streakMultiplier = 1,
+  player = null,
+}) {
   const startLength = level <= 5 ? 6 : level <= 10 ? 7 : 8
   const start = useMemo(() => {
     const pool = getShrinkableWords(startLength)
@@ -27,6 +37,8 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
     setHistory((words) => [...words, answer])
     setRemovedIndex(null)
     setInput('')
+    playSound('correct', soundEnabled)
+    triggerHaptic(hapticsEnabled, 18)
     showToast('Perfect shrink!', 'success')
     if (answer.length === 3) onComplete(nextScore, getXPForLevel(level), level + 1)
   }
@@ -38,7 +50,8 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
   }
 
   function chooseLetter(index) {
-    triggerHaptic(hapticsEnabled)
+    triggerHaptic(hapticsEnabled, 8)
+    playSound('key', soundEnabled)
     if (removedIndex === index) {
       setRemovedIndex(null)
       setInput('')
@@ -50,6 +63,8 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
     setInput(arrangement || nextRemaining)
     if (!arrangement) {
       showToast('No valid word from that removal. Try another letter.', 'error')
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       return
     }
     window.setTimeout(() => applyShrink(arrangement), 0)
@@ -58,12 +73,17 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
   function confirm(event) {
     event.preventDefault()
     const answer = input.trim().toLowerCase()
-    if (removedIndex === null) return showToast('Tap a letter to remove first.', 'error')
-    if ([...answer].sort().join('') !== [...remaining].sort().join('')) {
-      return showToast('Use every remaining letter exactly once.', 'error')
+    const fail = (message) => {
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
+      showToast(message, 'error')
     }
-    if (!isValidWord(answer)) return showToast(`'${answer}' is not a valid word.`, 'error')
-    if (hasUsedWord(answer)) return showToast(`'${answer}' was already used in another puzzle.`, 'error')
+    if (removedIndex === null) return fail('Tap a letter to remove first.')
+    if ([...answer].sort().join('') !== [...remaining].sort().join('')) {
+      return fail('Use every remaining letter exactly once.')
+    }
+    if (!isValidWord(answer)) return fail(`'${answer}' is not a valid word.`)
+    if (hasUsedWord(answer)) return fail(`'${answer}' was already used in another puzzle.`)
     applyShrink(answer)
   }
 
@@ -80,7 +100,13 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
 
   return (
     <div className="game-panel">
-      <ScoreBar score={score} xp={getXPForLevel(level)} />
+      <ScoreBar
+        score={score}
+        xp={Math.round(getXPForLevel(level) * xpMultiplier)}
+        xpMultiplier={xpMultiplier}
+        streakMultiplier={streakMultiplier}
+        streakCount={player?.streak?.count || 0}
+      />
       <div className="status-row"><span className="neutral-status">Steps left</span><strong>{stepsLeft}</strong></div>
       <section className="puzzle-card shrink-card">
         <div>
@@ -104,7 +130,10 @@ function WordShrink({ level, onComplete, showToast, hapticsEnabled = true }) {
         <input id="shrink-answer" type="text" value={input}
           onChange={(event) => {
             const nextValue = event.target.value.replace(/[^a-z]/gi, '')
-            if (nextValue.length > input.length) triggerHaptic(hapticsEnabled)
+            if (nextValue.length > input.length) {
+              triggerHaptic(hapticsEnabled, 8)
+              playSound('key', soundEnabled)
+            }
             setInput(nextValue)
           }}
           inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="off"

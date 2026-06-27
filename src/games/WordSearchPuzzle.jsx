@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel, shuffle, VALID_WORDS } from '../utils/wordUtils'
 import { getUsedWords, rememberWords } from '../utils/uniqueWords'
@@ -261,7 +262,17 @@ function lineStyle(cells, rows, cols) {
   }
 }
 
-function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, onComplete, hapticsEnabled = true }) {
+function WordSearchPuzzle({
+  level,
+  gameKey = 'wordsearchpuzzle',
+  player = null,
+  onComplete,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  timerMode = true,
+  xpMultiplier = 1,
+  streakMultiplier = 1,
+}) {
   const [phase, setPhase] = useState('difficulty')
   const [difficulty, setDifficulty] = useState(null)
   const [theme, setTheme] = useState(null)
@@ -285,7 +296,7 @@ function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, 
   )
 
   useEffect(() => {
-    if (phase !== 'playing') return undefined
+    if (phase !== 'playing' || !timerMode) return undefined
     const timer = window.setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt.current) / 1000))
     }, 250)
@@ -319,7 +330,8 @@ function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, 
   function pointerDown(cell, event) {
     if (phase !== 'playing') return
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    triggerHaptic(hapticsEnabled, 12)
+    triggerHaptic(hapticsEnabled, 8)
+    playSound('key', soundEnabled)
     setSelecting({
       active: true,
       startCell: cell,
@@ -358,10 +370,13 @@ function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, 
 
     if (!match) {
       setSelecting(emptySelecting)
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       return
     }
 
-    triggerHaptic(hapticsEnabled, 35)
+    triggerHaptic(hapticsEnabled, 18)
+    playSound('correct', soundEnabled)
     const nextFoundCells = { ...foundCells }
     highlightedCells.forEach((cell) => { nextFoundCells[cellKey(cell)] = match.color })
     const nextWords = words.map((word) =>
@@ -444,10 +459,16 @@ function WordSearchPuzzle({ level, gameKey = 'wordsearchpuzzle', player = null, 
 
   return (
     <div className="game-panel wsp-shell">
-      <ScoreBar score={score} xp={getXPForLevel(level)} />
+      <ScoreBar
+        score={score}
+        xp={Math.round(getXPForLevel(level) * xpMultiplier)}
+        xpMultiplier={xpMultiplier}
+        streakMultiplier={streakMultiplier}
+        streakCount={player?.streak?.count || 0}
+      />
       <div className="status-row wsp-status">
         <span className="neutral-status">{theme.name}</span>
-        <strong>{formatTime(finalTime ?? elapsed)}</strong>
+        <strong>{timerMode ? formatTime(finalTime ?? elapsed) : 'No limit'}</strong>
         <span>{foundCount}/{words.length}</span>
       </div>
 

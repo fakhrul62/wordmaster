@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
 import { buildDynamicCrossword } from '../utils/crosswordUtils'
 
-function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
+function CrossClue({ level, onComplete, showToast, hapticsEnabled = true, soundEnabled = true }) {
   const grid = useMemo(() => buildDynamicCrossword(level), [level])
   const [answers, setAnswers] = useState({})
   const [activeIndex, setActiveIndex] = useState(0)
@@ -44,7 +45,8 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
 
   const typeLetter = useCallback((letter) => {
     if (!/^[a-z]$/i.test(letter)) return
-    triggerHaptic(hapticsEnabled)
+    triggerHaptic(hapticsEnabled, 8)
+    playSound('key', soundEnabled)
     const entryIndex = activeIndexRef.current
     const position = cursorRef.current
     const entry = grid.entries[entryIndex]
@@ -64,11 +66,16 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
     setAnswers(nextAnswers)
     setCursor(nextCursor)
     const complete = grid.entries.every((entry, index) => nextAnswers[index] === entry.word)
-    if (complete) onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
-  }, [cells, grid.entries, hapticsEnabled, level, onComplete])
+    if (complete) {
+      playSound('correct', soundEnabled)
+      triggerHaptic(hapticsEnabled, 18)
+      onComplete(grid.entries.length * 100, getXPForLevel(level), level + 1)
+    }
+  }, [cells, grid.entries, hapticsEnabled, level, onComplete, soundEnabled])
 
   const erase = useCallback(() => {
-    triggerHaptic(hapticsEnabled)
+    triggerHaptic(hapticsEnabled, 8)
+    playSound('key', soundEnabled)
     const entryIndex = activeIndexRef.current
     const entry = grid.entries[entryIndex]
     if (!entry) return
@@ -88,7 +95,7 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
     cursorRef.current = target
     setAnswers(nextAnswers)
     setCursor(target)
-  }, [cells, grid.entries, hapticsEnabled])
+  }, [cells, grid.entries, hapticsEnabled, soundEnabled])
 
   useEffect(() => {
     hiddenInput.current?.focus()
@@ -167,7 +174,11 @@ function CrossClue({ level, onComplete, showToast, hapticsEnabled = true }) {
           if (event.key === 'Backspace') {
             event.preventDefault()
             erase()
-          } else if (event.key === 'Enter' && active && answers[activeIndex] !== active.word) showToast('That answer is not complete yet.', 'error')
+          } else if (event.key === 'Enter' && active && answers[activeIndex] !== active.word) {
+            playSound('wrong', soundEnabled)
+            triggerHaptic(hapticsEnabled, 40)
+            showToast('That answer is not complete yet.', 'error')
+          }
         }}
         aria-label="Crossword letter input"
       />
