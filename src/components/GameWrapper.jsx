@@ -242,6 +242,7 @@ function GameWrapper({
   const [rulesAccepted, setRulesAccepted] = useState(false)
   const [hintOpen, setHintOpen] = useState(false)
   const [hintsUsed, setHintsUsed] = useState(0)
+  const [hintRequest, setHintRequest] = useState(0)
   const previousGameKey = useRef(gameKey)
   const Game = GAME_COMPONENTS[gameKey]
   const rules = GAME_RULES[gameKey]
@@ -264,6 +265,7 @@ function GameWrapper({
     setRulesAccepted(false)
     setHintsUsed(0)
     setHintOpen(false)
+    setHintRequest(0)
   }, [gameKey, gameProgress, level, mode])
 
   useEffect(() => {
@@ -332,6 +334,7 @@ function GameWrapper({
     setLevelSelectionOpen(false)
     setHintsUsed(0)
     setHintOpen(false)
+    setHintRequest(0)
   }
 
   function useHint() {
@@ -347,6 +350,7 @@ function GameWrapper({
     }
     setHintsUsed((value) => value + 1)
     setHintOpen(false)
+    setHintRequest((value) => value + 1)
     playSound('coin', soundEnabled)
     triggerHaptic(hapticsEnabled, 18)
     showToast?.(HINTS[gameKey]?.effect || 'Hint unlocked for this run.', 'success')
@@ -464,6 +468,7 @@ function GameWrapper({
               activePack={activePack}
               xpMultiplier={xpMultiplier}
               streakMultiplier={streakMultiplier}
+              hintRequest={hintRequest}
               onComplete={finish}
               showToast={showToast}
               hapticsEnabled={hapticsEnabled}

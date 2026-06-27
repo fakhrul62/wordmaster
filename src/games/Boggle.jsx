@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ScoreBar from '../components/ScoreBar'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getXPForLevel } from '../utils/wordUtils'
 import { hasUsedWord, rememberWord } from '../utils/uniqueWords'
@@ -27,8 +29,19 @@ async function isDictionaryWord(word) {
   return response.ok
 }
 
-function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnabled = true }) {
-  const modeLength = Number(minimumLength) || 3
+function Boggle({
+  level,
+  minimumLength = 3,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  difficulty = 'normal',
+  xpMultiplier = 1,
+  streakMultiplier = 1,
+  player = null,
+}) {
+  const modeLength = difficulty === 'hard' ? Math.max(4, Number(minimumLength) || 3) : Number(minimumLength) || 3
   const [board, setBoard] = useState(() => makeBoard())
   const [path, setPath] = useState([])
   const [found, setFound] = useState([])
@@ -56,11 +69,13 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
     setPath((items) => {
       if (items.at(-1)?.id === tile.id) {
         if (!allowToggle) return items
-        triggerHaptic(hapticsEnabled)
+        triggerHaptic(hapticsEnabled, 8)
+        playSound('key', soundEnabled)
         return items.slice(0, -1)
       }
       if (items.some(({ id }) => id === tile.id)) return items
-      triggerHaptic(hapticsEnabled)
+      triggerHaptic(hapticsEnabled, 8)
+      playSound('key', soundEnabled)
       return [...items, tile]
     })
   }
@@ -76,6 +91,8 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
     if (expired || validating || !word) return
     if (word.length < modeLength) {
       setPath([])
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       showToast(`Minimum length is ${modeLength}.`, 'error')
       return
     }
@@ -85,6 +102,8 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
     }
     if (hasUsedWord(word)) {
       setPath([])
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       showToast('That word was already used in another puzzle.', 'error')
       return
     }
@@ -99,16 +118,22 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
           if (nextScore >= targetScore) {
             const completionTime = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000))
             setExpired(true)
+            playSound('correct', soundEnabled)
+            triggerHaptic(hapticsEnabled, 18)
             window.setTimeout(() => onComplete(nextScore, getXPForLevel(level), level + 1, { completionTime }), 0)
           }
           return nextWords
         })
         showToast(`+${wordScore} ${word.toUpperCase()}`, 'success')
+        playSound('correct', soundEnabled)
       } else {
         showToast('Not in the dictionary.', 'error')
+        playSound('wrong', soundEnabled)
+        triggerHaptic(hapticsEnabled, 40)
       }
     } catch {
       showToast('Dictionary check failed. Try again.', 'error')
+      playSound('wrong', soundEnabled)
     } finally {
       setPath([])
       setValidating(false)
@@ -121,6 +146,13 @@ function Boggle({ level, minimumLength = 3, onComplete, showToast, hapticsEnable
 
   return (
     <div className="game-panel">
+      <ScoreBar
+        score={score}
+        xp={Math.round(getXPForLevel(level) * xpMultiplier)}
+        xpMultiplier={xpMultiplier}
+        streakMultiplier={streakMultiplier}
+        streakCount={player?.streak?.count || 0}
+      />
       <div className="status-row">
         <span className="neutral-status">Min {modeLength}</span>
         <strong>{found.length} words</strong>

@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getWordleAnswerCandidates, getXPForLevel, isValidWord } from '../utils/wordUtils'
 import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
-const LENGTHS = [3, 4, 5, 6]
-const MAX_ATTEMPTS = 6
-const ROWS = Array.from({ length: MAX_ATTEMPTS })
 const KEYS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']
+
+const DIFFICULTY_RULES = {
+  easy: { length: 5, attempts: 8 },
+  normal: { length: 5, attempts: 6 },
+  hard: { length: 6, attempts: 5 },
+}
 
 function pickWord(length) {
   const pool = getWordleAnswerCandidates(length)
@@ -33,7 +37,7 @@ function scoreGuess(guess, answer) {
 }
 
 function getWinScore(wordLength, guessCount) {
-  const speedBonus = (MAX_ATTEMPTS - guessCount + 1) * 25
+  const speedBonus = Math.max(0, (8 - guessCount + 1) * 25)
   return wordLength * 50 + speedBonus
 }
 
@@ -41,11 +45,25 @@ function getTargetScore(level, wordLength) {
   return wordLength * 50 + Math.min(100, Math.floor((level - 1) * 8))
 }
 
-function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
+function Wordle({
+  level,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  difficulty = 'normal',
+  xpMultiplier = 1,
+  streakMultiplier = 1,
+  player = null,
+  hintRequest = 0,
+}) {
+  const rules = DIFFICULTY_RULES[difficulty] || DIFFICULTY_RULES.normal
   const [wordLength, setWordLength] = useState(null)
+  const [maxAttempts, setMaxAttempts] = useState(rules.attempts)
   const [answer, setAnswer] = useState('')
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
+  const [revealed, setRevealed] = useState([])
   const [status, setStatus] = useState('playing')
   const [score, setScore] = useState(0)
   const [viewport, setViewport] = useState(() => ({
@@ -53,25 +71,31 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     height: window.innerHeight,
   }))
 
-  function start(length) {
+  function start(length = rules.length, attempts = rules.attempts) {
     const nextAnswer = pickWord(length)
     if (!nextAnswer) {
       showToast('No word available for this length.', 'error')
+      playSound('wrong', soundEnabled)
       return
     }
     setWordLength(length)
+    setMaxAttempts(attempts)
     setAnswer(nextAnswer)
     setGuesses([])
     setCurrent('')
+    setRevealed([])
     setStatus('playing')
     setScore(0)
+    playSound('key', soundEnabled)
   }
 
   function reset() {
     setWordLength(null)
+    setMaxAttempts(rules.attempts)
     setAnswer('')
     setGuesses([])
     setCurrent('')
+    setRevealed([])
     setStatus('playing')
     setScore(0)
   }
@@ -80,14 +104,16 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (status !== 'playing' || !wordLength) return
     setCurrent((previous) => {
       if (previous.length >= wordLength) return previous
-      triggerHaptic(hapticsEnabled)
+      triggerHaptic(hapticsEnabled, 8)
+      playSound('key', soundEnabled)
       return `${previous}${letter}`
     })
   }
 
   function removeLetterAt(index) {
     if (status !== 'playing') return
-    triggerHaptic(hapticsEnabled)
+    triggerHaptic(hapticsEnabled, 8)
+    playSound('key', soundEnabled)
     setCurrent((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
   }
 
@@ -95,7 +121,8 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (status !== 'playing') return
     setCurrent((value) => {
       if (!value) return value
-      triggerHaptic(hapticsEnabled)
+      triggerHaptic(hapticsEnabled, 8)
+      playSound('key', soundEnabled)
       return value.slice(0, -1)
     })
   }
@@ -104,14 +131,20 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     if (status !== 'playing' || !wordLength) return
     if (current.length !== wordLength) {
       showToast(`Enter a ${wordLength}-letter word.`, 'error')
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       return
     }
     if (!isValidWord(current)) {
       showToast(`'${current.toUpperCase()}' is not in the word list.`, 'error')
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       return
     }
     if (current !== answer && hasUsedWord(current)) {
       showToast(`'${current.toUpperCase()}' was already used in another puzzle.`, 'error')
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
       return
     }
     rememberWord(current)
@@ -123,6 +156,8 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
       const targetScore = getTargetScore(level, wordLength)
       setScore(nextScore)
       setStatus('won')
+      playSound('correct', soundEnabled)
+      triggerHaptic(hapticsEnabled, 18)
       if (nextScore >= targetScore) {
         showToast('All green. Level cleared.', 'success')
         onComplete(nextScore, getXPForLevel(level), level + 1)
@@ -131,7 +166,9 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
       }
       return
     }
-    if (nextGuesses.length >= MAX_ATTEMPTS) {
+    playSound('wrong', soundEnabled)
+    triggerHaptic(hapticsEnabled, 40)
+    if (nextGuesses.length >= maxAttempts) {
       setStatus('lost')
       showToast(`The word was ${answer.toUpperCase()}.`, 'error')
     }
@@ -155,6 +192,25 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
   }, [])
 
   useEffect(() => {
+    start(rules.length, rules.attempts)
+  }, [difficulty])
+
+  useEffect(() => {
+    if (!hintRequest || !answer) return
+    const openIndexes = answer
+      .split('')
+      .map((letter, index) => ({ letter, index }))
+      .filter(({ index }) => !revealed.includes(index) && current[index] !== answer[index])
+    const next = openIndexes[0]
+    if (!next) {
+      showToast('Every revealed slot is already visible.', 'info')
+      return
+    }
+    setRevealed((items) => [...items, next.index])
+    showToast(`Hint: position ${next.index + 1} is ${next.letter.toUpperCase()}.`, 'success')
+  }, [hintRequest])
+
+  useEffect(() => {
     function onKeyDown(event) {
       if (!wordLength) return
       if (event.key === 'Enter') {
@@ -173,21 +229,7 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   })
 
-  if (!wordLength) {
-    return (
-      <div className="game-panel">
-        <section className="choice-panel">
-          <p className="eyebrow">Wordle</p>
-          <h1>Pick word length</h1>
-          <div className="length-options">
-            {LENGTHS.map((length) => (
-              <button className="btn-secondary" key={length} onClick={() => start(length)}>{length}</button>
-            ))}
-          </div>
-        </section>
-      </div>
-    )
-  }
+  if (!wordLength) return null
 
   const gap = 6
   const keyboardHeight = Math.floor(Math.max(188, Math.min(238, viewport.height * 0.25)))
@@ -197,17 +239,23 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
   const tileSize = Math.floor(Math.max(42, Math.min(
     maxTileSize,
     (viewport.width - 32 - (wordLength - 1) * gap) / wordLength,
-    (viewport.height - reservedHeight - (MAX_ATTEMPTS - 1) * gap) / MAX_ATTEMPTS,
+    (viewport.height - reservedHeight - (maxAttempts - 1) * gap) / maxAttempts,
   )))
   const keyHeight = Math.floor((keyboardHeight - submitHeight - 28) / 3)
   const targetScore = getTargetScore(level, wordLength)
 
   return (
     <div className="game-panel wordle-panel">
-      <ScoreBar score={score} xp={getXPForLevel(level)} />
+      <ScoreBar
+        score={score}
+        xp={Math.round(getXPForLevel(level) * xpMultiplier)}
+        xpMultiplier={xpMultiplier}
+        streakMultiplier={streakMultiplier}
+        streakCount={player?.streak?.count || 0}
+      />
       <div className="status-row">
-        <span className="neutral-status">{wordLength} letters</span>
-        <strong>{guesses.length}/{MAX_ATTEMPTS}</strong>
+        <span className="neutral-status">{wordLength} letters · {difficulty}</span>
+        <strong>{guesses.length}/{maxAttempts}</strong>
         <span>{score}/{targetScore} pts</span>
       </div>
       <section
@@ -215,17 +263,20 @@ function Wordle({ level, onComplete, showToast, hapticsEnabled = true }) {
         style={{ '--wordle-tile': `${tileSize}px`, '--wordle-gap': `${gap}px` }}
         aria-label="Wordle guesses"
       >
-        {ROWS.map((_, rowIndex) => {
+        {Array.from({ length: maxAttempts }).map((_, rowIndex) => {
           const guess = guesses[rowIndex]
           const letters = guess || (rowIndex === guesses.length ? current : '')
           const states = guess ? scoreGuess(guess, answer) : []
           return (
             <div className="wordle-row" style={{ gridTemplateColumns: `repeat(${wordLength}, 1fr)` }} key={rowIndex}>
               {Array.from({ length: wordLength }, (__, index) => {
-                const letter = letters[index] || ''
+                const letter = revealed.includes(index) && !guess && rowIndex === guesses.length
+                  ? answer[index]
+                  : letters[index] || ''
+                const revealedSlot = revealed.includes(index) && !guess && rowIndex === guesses.length
                 const isEditableLetter = !guess && letter
                 return isEditableLetter ? (
-                  <button className="wordle-tile editable" key={index} onClick={() => removeLetterAt(index)}>{letter}</button>
+                  <button className={`wordle-tile editable ${revealedSlot ? 'correct' : ''}`} key={index} onClick={() => !revealedSlot && removeLetterAt(index)}>{letter}</button>
                 ) : (
                   <span className={`wordle-tile ${states[index] || ''}`} key={index}>{letter}</span>
                 )

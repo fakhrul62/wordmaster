@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getLetterLockSets, getSubWords, getXPForLevel, isValidWord } from '../utils/wordUtils'
 import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
@@ -10,7 +11,15 @@ function bestCenterLetter(source, candidates) {
     candidates.filter((word) => word.includes(a)).length)[0]
 }
 
-function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
+function LetterLock({
+  level,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  difficulty = 'normal',
+  timerMode = true,
+}) {
   const [set] = useState(() => {
     const pool = getLetterLockSets()
     return pickUnusedWord(pool, ({ word }) => word)
@@ -25,7 +34,8 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     [allValidWords, centerLetter],
   )
   const target = Math.min(8, Math.max(4, Math.floor(validWords.length * 0.45)))
-  const timeLimit = Math.max(60, 120 - level * 2)
+  const baseTime = Math.max(60, 120 - level * 2)
+  const timeLimit = Math.max(30, Math.round(baseTime * (difficulty === 'easy' ? 1.2 : difficulty === 'hard' ? 0.8 : 1)))
   const [answer, setAnswer] = useState('')
   const [found, setFound] = useState([])
   const [score, setScore] = useState(0)
@@ -48,11 +58,13 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
   }, [])
 
   useEffect(() => {
-    if (paused) return undefined
+    if (paused || !timerMode) return undefined
     const timer = window.setInterval(() => {
       setTimeLeft((time) => {
         if (time > 1) return time - 1
         showToast('Time is up. The lock has reset.', 'error')
+        playSound('wrong', soundEnabled)
+        triggerHaptic(hapticsEnabled, 40)
         setFound([])
         setScore(0)
         setAnswer('')
@@ -60,7 +72,7 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [paused, showToast, timeLimit])
+  }, [hapticsEnabled, paused, showToast, soundEnabled, timeLimit, timerMode])
 
   useEffect(() => {
     function keyboard(event) {
@@ -76,17 +88,25 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     setAnswer((value) => {
       const available = source.split('').filter((item) => item === letter).length
       const used = value.split('').filter((item) => item === letter).length
-      if (used < available) triggerHaptic(hapticsEnabled)
+      if (used < available) {
+        triggerHaptic(hapticsEnabled, 8)
+        playSound('key', soundEnabled)
+      }
       return used < available ? value + letter : value
     })
   }
 
   function submit() {
-    if (answer.length < 3) return showToast('Words need at least three letters.', 'error')
-    if (!answer.includes(centerLetter)) return showToast(`Every word must include ${centerLetter.toUpperCase()}.`, 'error')
-    if (!isValidWord(answer) || !validWords.includes(answer)) return showToast(`'${answer}' is not in this lock.`, 'error')
-    if (found.includes(answer)) return showToast(`Already found '${answer}'.`, 'error')
-    if (answer !== source && hasUsedWord(answer)) return showToast(`'${answer}' was already used in another puzzle.`, 'error')
+    const fail = (message) => {
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
+      showToast(message, 'error')
+    }
+    if (answer.length < 3) return fail('Words need at least three letters.')
+    if (!answer.includes(centerLetter)) return fail(`Every word must include ${centerLetter.toUpperCase()}.`)
+    if (!isValidWord(answer) || !validWords.includes(answer)) return fail(`'${answer}' is not in this lock.`)
+    if (found.includes(answer)) return fail(`Already found '${answer}'.`)
+    if (answer !== source && hasUsedWord(answer)) return fail(`'${answer}' was already used in another puzzle.`)
     rememberWord(answer)
     const pangram = answer.length === source.length && [...answer].sort().join('') === [...source].sort().join('')
     const nextScore = score + answer.length * 10 + (pangram ? 50 : 0)
@@ -94,6 +114,8 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     setScore(nextScore)
     setFound(nextFound)
     setAnswer('')
+    playSound('correct', soundEnabled)
+    triggerHaptic(hapticsEnabled, 18)
     showToast(pangram ? 'Pangram! Bonus unlocked.' : 'Word found!', 'success')
     if (nextFound.length >= target) onComplete(nextScore, getXPForLevel(level), level + 1)
   }
@@ -106,7 +128,9 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
     <div className="game-panel">
       <div className="lock-status">
         <div><small>Found</small><strong>{found.length}/{target}</strong></div>
-        <div className="timer-track"><span style={{ width: `${(timeLeft / timeLimit) * 100}%` }} /></div>
+        {timerMode
+          ? <div className="timer-track"><span style={{ width: `${(timeLeft / timeLimit) * 100}%` }} /></div>
+          : <span className="hud-badge">No time limit</span>}
         <div><small>Score</small><strong>{score}</strong></div>
       </div>
       <div className="letterlock-answer" aria-label={`Current answer: ${answer || 'empty'}`}>
@@ -115,7 +139,8 @@ function LetterLock({ level, onComplete, showToast, hapticsEnabled = true }) {
             className="letterlock-answer-letter"
             key={`${letter}-${index}`}
             onClick={() => {
-              triggerHaptic(hapticsEnabled)
+              triggerHaptic(hapticsEnabled, 8)
+              playSound('key', soundEnabled)
               setAnswer((value) => `${value.slice(0, index)}${value.slice(index + 1)}`)
             }}
           >

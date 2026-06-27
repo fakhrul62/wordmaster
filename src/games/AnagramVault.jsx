@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { getCategoryForDifficulty, getDifficultyForLevel, getXPForLevel, getWordsByCategory, shuffle } from '../utils/wordUtils'
 import { pickUnusedWords } from '../utils/uniqueWords'
@@ -9,9 +10,18 @@ function scramble(word) {
   return letters.map((letter, index) => ({ letter, id: `${index}-${letter}` }))
 }
 
-function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
+function AnagramVault({
+  level,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  difficulty = 'normal',
+  timerMode = true,
+}) {
   const wordCount = 3 + Math.floor(level / 2)
-  const timeLimit = Math.max(30, 90 - level * 2)
+  const baseTime = Math.max(30, 90 - level * 2)
+  const timeLimit = Math.max(20, Math.round(baseTime * (difficulty === 'easy' ? 1.2 : difficulty === 'hard' ? 0.8 : 1)))
   const words = useMemo(() => {
     const category = getCategoryForDifficulty(getDifficultyForLevel(level))
     const pool = getWordsByCategory(category).filter(({ length }) => length >= 4 && length <= 8)
@@ -32,11 +42,13 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
   }, [])
 
   useEffect(() => {
-    if (paused) return undefined
+    if (paused || !timerMode) return undefined
     const timer = window.setInterval(() => {
       setTimeLeft((time) => {
         if (time > 1) return time - 1
         showToast('The vault reset. Try a new sequence.', 'error')
+        playSound('wrong', soundEnabled)
+        triggerHaptic(hapticsEnabled, 40)
         setWordIndex(0)
         setScore(0)
         setSelected([])
@@ -45,7 +57,7 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [paused, showToast, timeLimit, words])
+  }, [hapticsEnabled, paused, showToast, soundEnabled, timeLimit, timerMode, words])
 
   useEffect(() => {
     function keyboard(event) {
@@ -71,7 +83,8 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
 
   function choose(tile) {
     setSelected((items) => {
-      triggerHaptic(hapticsEnabled)
+      triggerHaptic(hapticsEnabled, 8)
+      playSound('key', soundEnabled)
       return items.some(({ id }) => id === tile.id)
         ? items.filter(({ id }) => id !== tile.id)
         : [...items, tile]
@@ -80,9 +93,15 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
 
   function submit() {
     const answer = selected.map(({ letter }) => letter).join('')
-    if (answer !== current.word) return showToast('That combination does not unlock it.', 'error')
+    if (answer !== current.word) {
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
+      return showToast('That combination does not unlock it.', 'error')
+    }
     const nextScore = score + current.word.length * 20 + timeLeft
     if (wordIndex + 1 >= words.length) {
+      playSound('correct', soundEnabled)
+      triggerHaptic(hapticsEnabled, 18)
       onComplete(nextScore, getXPForLevel(level), level + 1)
       return
     }
@@ -91,6 +110,8 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
     setWordIndex(nextIndex)
     setSelected([])
     setTiles(scramble(words[nextIndex].word))
+    playSound('correct', soundEnabled)
+    triggerHaptic(hapticsEnabled, 18)
     showToast('Vault opened!', 'success')
   }
 
@@ -110,13 +131,13 @@ function AnagramVault({ level, onComplete, showToast, hapticsEnabled = true }) {
     <div className="game-panel">
       <div className="anagram-head">
         <div><p className="eyebrow">Vault sequence</p><strong>{wordIndex + 1} / {words.length}</strong></div>
-        <svg className="timer-ring" width="64" height="64" viewBox="0 0 80 80" aria-label={`${timeLeft} seconds remaining`}>
+        {timerMode ? <svg className="timer-ring" width="64" height="64" viewBox="0 0 80 80" aria-label={`${timeLeft} seconds remaining`}>
           <circle cx="40" cy="40" r="36" fill="none" stroke="var(--bg3)" strokeWidth="6" />
           <circle cx="40" cy="40" r="36" fill="none" stroke={timeLeft < 10 ? 'var(--error)' : 'var(--accent)'} strokeWidth="6"
             strokeDasharray="226.2" strokeDashoffset={226.2 * (1 - timeLeft / timeLimit)} strokeLinecap="round"
             transform="rotate(-90 40 40)" style={{ transition: 'stroke-dashoffset 1s linear' }} />
           <text x="40" y="46" textAnchor="middle" fill="var(--text)" fontSize="18">{timeLeft}</text>
-        </svg>
+        </svg> : <span className="hud-badge">No time limit</span>}
       </div>
       <section className="puzzle-card">
         <div><p className="puzzle-label">Scrambled letters</p>

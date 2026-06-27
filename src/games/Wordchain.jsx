@@ -1,11 +1,24 @@
 import { useEffect, useState } from 'react'
 import ScoreBar from '../components/ScoreBar'
+import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { VALID_WORDS, getWordsByLength, getXPForLevel, isValidWord, shuffle } from '../utils/wordUtils'
 import { hasUsedWord, pickUnusedWord, rememberWord } from '../utils/uniqueWords'
 
-function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
-  const maxTime = Math.max(6, 15 - Math.floor(level / 3))
+function Wordchain({
+  level,
+  onComplete,
+  showToast,
+  hapticsEnabled = true,
+  soundEnabled = true,
+  difficulty = 'normal',
+  timerMode = true,
+  xpMultiplier = 1,
+  streakMultiplier = 1,
+  player = null,
+}) {
+  const difficultyTime = difficulty === 'easy' ? 25 : difficulty === 'hard' ? 10 : 18
+  const maxTime = timerMode ? difficultyTime : 999
   const targetChain = 5 + level
   const [starter] = useState(() => {
     const pool = getWordsByLength(3)
@@ -26,7 +39,7 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
   }, [])
 
   useEffect(() => {
-    if (paused) return undefined
+    if (paused || !timerMode) return undefined
     const timer = window.setInterval(() => {
       setTimeLeft((time) => {
         if (time > 1) return time - 1
@@ -34,27 +47,36 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
           const next = current - 1
           if (next <= 0) {
             showToast('Chain broken — start a new run!', 'error')
+            playSound('wrong', soundEnabled)
+            triggerHaptic(hapticsEnabled, 40)
             setChain([])
             setScore(0)
             return 3
           }
           showToast('Time ran out. One heart lost.', 'error')
+          playSound('wrong', soundEnabled)
+          triggerHaptic(hapticsEnabled, 40)
           return next
         })
         return maxTime
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [maxTime, paused, showToast])
+  }, [hapticsEnabled, maxTime, paused, showToast, soundEnabled, timerMode])
 
   function submit(event) {
     event.preventDefault()
     const word = input.trim().toLowerCase()
-    if (word.length < 3) return showToast('Too short!', 'error')
-    if (!word.startsWith(requiredLetter)) return showToast(`Must start with '${requiredLetter.toUpperCase()}'`, 'error')
-    if (!isValidWord(word)) return showToast(`'${word}' isn't valid`, 'error')
-    if (chain.includes(word)) return showToast(`Already used '${word}'`, 'error')
-    if (hasUsedWord(word)) return showToast(`'${word}' was already used in another puzzle.`, 'error')
+    const fail = (message) => {
+      playSound('wrong', soundEnabled)
+      triggerHaptic(hapticsEnabled, 40)
+      showToast(message, 'error')
+    }
+    if (word.length < 3) return fail('Too short!')
+    if (!word.startsWith(requiredLetter)) return fail(`Must start with '${requiredLetter.toUpperCase()}'`)
+    if (!isValidWord(word)) return fail(`'${word}' isn't valid`)
+    if (chain.includes(word)) return fail(`Already used '${word}'`)
+    if (hasUsedWord(word)) return fail(`'${word}' was already used in another puzzle.`)
     rememberWord(word)
     const nextChain = [word, ...chain]
     const nextScore = score + word.length * 10
@@ -72,6 +94,8 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
     }
     setInput('')
     setTimeLeft(maxTime)
+    playSound('correct', soundEnabled)
+    triggerHaptic(hapticsEnabled, 18)
     if (hasContinuation) showToast('Chain extended!', 'success')
     if (nextChain.length >= targetChain) onComplete(nextScore, getXPForLevel(level), level + 1)
   }
@@ -82,14 +106,22 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
 
   return (
     <div className="game-panel">
-      <ScoreBar score={score} xp={getXPForLevel(level)} />
+      <ScoreBar
+        score={score}
+        xp={Math.round(getXPForLevel(level) * xpMultiplier)}
+        xpMultiplier={xpMultiplier}
+        streakMultiplier={streakMultiplier}
+        streakCount={player?.streak?.count || 0}
+      />
       <div className="status-row">
         <span aria-label={`${hearts} hearts`}>{'♥ '.repeat(hearts).trim()}</span>
         <span>{chain.length}/{targetChain} words</span>
       </div>
-      <div className="timer-track" aria-label={`${timeLeft} seconds remaining`}>
-        <span style={{ width: `${(timeLeft / maxTime) * 100}%` }} />
-      </div>
+      {timerMode ? (
+        <div className="timer-track" aria-label={`${timeLeft} seconds remaining`}>
+          <span style={{ width: `${(timeLeft / maxTime) * 100}%` }} />
+        </div>
+      ) : <span className="hud-badge">No time limit</span>}
       <section className="prompt-card">
         <p>Next word starts with</p>
         <strong className="big-letter">{requiredLetter}</strong>
@@ -100,7 +132,10 @@ function Wordchain({ level, onComplete, showToast, hapticsEnabled = true }) {
           value={input}
           onChange={(event) => {
             const nextValue = event.target.value.replace(/[^a-z]/gi, '')
-            if (nextValue.length > input.length) triggerHaptic(hapticsEnabled)
+            if (nextValue.length > input.length) {
+              triggerHaptic(hapticsEnabled, 8)
+              playSound('key', soundEnabled)
+            }
             setInput(nextValue)
           }}
           placeholder="Type a word..."
