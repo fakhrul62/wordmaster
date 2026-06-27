@@ -1,10 +1,12 @@
 import LevelBadge from './LevelBadge'
 import DifficultyPicker from './DifficultyPicker'
+import ShareCard from './ShareCard'
 import { useEffect, useRef, useState } from 'react'
 import { playSound } from '../utils/audio'
 import { triggerHaptic } from '../utils/haptics'
 import { GAME_NAMES } from '../data/gameCatalog'
 import { WORD_PACKS } from '../data/wordPacks'
+import { encodeChallengeURL, makeChallengeSeed } from '../utils/challenge'
 import {
   BOGGLE_MODES,
   getGameTrack,
@@ -218,6 +220,7 @@ function GameWrapper({
   gameKey,
   level,
   mode = null,
+  challengeSeed = null,
   player = null,
   settings = {},
   gameProgress = null,
@@ -244,6 +247,7 @@ function GameWrapper({
   const [hintsUsed, setHintsUsed] = useState(0)
   const [hintRequest, setHintRequest] = useState(0)
   const previousGameKey = useRef(gameKey)
+  const shareCardRef = useRef(null)
   const Game = GAME_COMPONENTS[gameKey]
   const rules = GAME_RULES[gameKey]
   const activeTrack = getGameTrack(gameProgress, gameKey, gameKey === 'boggle' ? selectedMode : null)
@@ -356,6 +360,49 @@ function GameWrapper({
     showToast?.(HINTS[gameKey]?.effect || 'Hint unlocked for this run.', 'success')
   }
 
+  function resultText() {
+    return `WordMaster ${GAME_NAMES[gameKey]}: ${result?.score || 0} points, level ${selectedLevel}, +${result?.xp || 0} XP`
+  }
+
+  async function shareResult() {
+    if (!result) return
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(shareCardRef.current, { backgroundColor: null })
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+      const file = new File([blob], 'wordmaster-result.png', { type: 'image/png' })
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'WordMaster', text: resultText() })
+        showToast?.('Shared!', 'success')
+        return
+      }
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = 'wordmaster-result.png'
+      link.click()
+      URL.revokeObjectURL(link.href)
+      showToast?.('Saved!', 'success')
+    } catch {
+      await navigator.clipboard?.writeText(resultText())
+      showToast?.('Copied result text.', 'success')
+    }
+  }
+
+  async function copyWordleText() {
+    await navigator.clipboard?.writeText(resultText())
+    showToast?.('Copied!', 'success')
+  }
+
+  async function challengeFriend() {
+    const seed = makeChallengeSeed({ gameKey, level: selectedLevel, mode: selectedMode, difficulty, activePack })
+    const url = encodeChallengeURL(gameKey, seed)
+    if (navigator.share) {
+      await navigator.share({ title: 'WordMaster challenge', text: 'Try this same WordMaster puzzle.', url }).catch(() => {})
+    }
+    await navigator.clipboard?.writeText(url)
+    showToast?.('Link copied!', 'success')
+  }
+
   return (
     <main className={`screen game-wrapper game-${gameKey}`}>
       <header className="game-topbar">
@@ -367,6 +414,7 @@ function GameWrapper({
         </div>
       </header>
       <section className="game-content">
+        {challengeSeed && <div className="challenge-banner">Challenge from a friend — same puzzle!</div>}
         {Game && levelSelectionOpen ? (
           <section className="level-select-panel" aria-labelledby="level-select-title">
             <p className="eyebrow">Level progression</p>
@@ -481,6 +529,13 @@ function GameWrapper({
       </section>
       {result && (
         <div className="level-complete-overlay" role="dialog" aria-modal="true" aria-labelledby="level-complete-title">
+          <ShareCard
+            ref={shareCardRef}
+            gameKey={gameKey}
+            result={result}
+            player={player}
+            level={selectedLevel}
+          />
           <p className="eyebrow">Level cleared</p>
           <h1 id="level-complete-title">Excellent work.</h1>
           <div className="result-score">
@@ -498,6 +553,9 @@ function GameWrapper({
           <div className="btn-row">
             <button className="btn-primary" onClick={() => setResult(null)}>NEXT LEVEL</button>
             <button className="btn-secondary" onClick={onBack}>HOME</button>
+            <button className="btn-secondary" onClick={shareResult}>SHARE RESULT</button>
+            {gameKey === 'wordle' && <button className="btn-secondary" onClick={copyWordleText}>COPY TEXT</button>}
+            <button className="btn-secondary" onClick={challengeFriend}>CHALLENGE A FRIEND</button>
           </div>
         </div>
       )}

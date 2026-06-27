@@ -366,6 +366,17 @@ export function usePlayerData() {
     return true
   }, [persistPlayer, player])
 
+  const setNotificationsEnabled = useCallback((enabled, pushSubscription = null) => {
+    if (!player) return
+    const next = {
+      ...player,
+      notificationsEnabled: Boolean(enabled),
+      pushSubscription: enabled ? pushSubscription || player.pushSubscription : null,
+    }
+    setPlayer(next)
+    persistPlayer(next)
+  }, [persistPlayer, player])
+
   const switchPlayer = useCallback(() => {
     setPlayer(null)
     try {
@@ -377,12 +388,35 @@ export function usePlayerData() {
     setSyncError('')
   }, [])
 
-  const getLeaderboard = useCallback(() => {
+  const getLeaderboard = useCallback(async (scope = 'global') => {
     try {
-      return buildLeaderboard(readStoredPlayers(), player)
+      const local = buildLeaderboard(readStoredPlayers(), player)
+      if (scope === 'friends') return local
+      const query = player?.accountEmail
+        ? `around=${encodeURIComponent(player.accountEmail)}&limit=10`
+        : 'limit=10'
+      const response = await fetch(`/api/leaderboard?${query}`)
+      if (!response.ok) throw new Error('Leaderboard unavailable')
+      const global = await response.json()
+      return {
+        ...local,
+        ...global,
+        friends: local.friends,
+        entries: (global.entries || local.entries).map((entry) => ({
+          ...entry,
+          bestBoggleTime: entry.bestBoggleTime || null,
+        })),
+        playerRank: global.playerRank || local.playerRank,
+        totalPlayers: global.totalPlayers || local.totalPlayers,
+        global: true,
+      }
     } catch {
-      setStorageWarning(true)
-      return buildLeaderboard(player ? [player] : [], player)
+      try {
+        return buildLeaderboard(readStoredPlayers(), player)
+      } catch {
+        setStorageWarning(true)
+        return buildLeaderboard(player ? [player] : [], player)
+      }
     }
   }, [player])
 
@@ -396,6 +430,7 @@ export function usePlayerData() {
     selectWordPack,
     spendCoins,
     unlockWordPack,
+    setNotificationsEnabled,
     connectAccount,
     switchPlayer,
     getLeaderboard,

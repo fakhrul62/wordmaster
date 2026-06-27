@@ -49,6 +49,9 @@ function createModeProgress(existing = {}) {
     clears: Math.max(0, Number(existing.clears) || 0),
     bestTime: Number.isFinite(bestTime) && bestTime > 0 ? Math.round(bestTime) : null,
     completedLevels: Array.isArray(existing.completedLevels) ? existing.completedLevels : [],
+    difficulty: ['easy', 'normal', 'hard'].includes(existing.difficulty) ? existing.difficulty : 'normal',
+    timerMode: existing.timerMode !== false,
+    activePack: typeof existing.activePack === 'string' ? existing.activePack : 'default',
   }
 }
 
@@ -103,6 +106,9 @@ function sanitizePlayer(player, email) {
     totalXP,
     totalPoints: Math.max(0, Number(player?.totalPoints) || totalXP),
     coins: Math.max(0, Number(player?.coins) || 0),
+    unlockedPacks: Array.isArray(player?.unlockedPacks) ? player.unlockedPacks : [],
+    notificationsEnabled: Boolean(player?.notificationsEnabled),
+    pushSubscription: player?.pushSubscription || null,
     gamesPlayed: Math.max(0, Number(player?.gamesPlayed) || 0),
     dailyChallengesCompleted: Math.max(0, Number(player?.dailyChallengesCompleted) || 0),
     eventMissionsCompleted: Math.max(0, Number(player?.eventMissionsCompleted) || 0),
@@ -147,6 +153,9 @@ function mergePlayers(localPlayer, remotePlayer, email) {
           xp: Math.max(localMode.xp, remoteMode.xp),
           clears: Math.max(localMode.clears, remoteMode.clears),
           bestTime: betterBestTime(localMode.bestTime, remoteMode.bestTime),
+          difficulty: localMode.difficulty || remoteMode.difficulty || 'normal',
+          timerMode: localMode.timerMode !== false && remoteMode.timerMode !== false,
+          activePack: localMode.activePack || remoteMode.activePack || 'default',
           completedLevels: [...new Set([
             ...localMode.completedLevels,
             ...remoteMode.completedLevels,
@@ -174,6 +183,9 @@ function mergePlayers(localPlayer, remotePlayer, email) {
       xp: Math.max(local.games[key].xp, remote.games[key].xp),
       clears: Math.max(local.games[key].clears, remote.games[key].clears),
       bestTime: betterBestTime(local.games[key].bestTime, remote.games[key].bestTime),
+      difficulty: local.games[key].difficulty || remote.games[key].difficulty || 'normal',
+      timerMode: local.games[key].timerMode !== false && remote.games[key].timerMode !== false,
+      activePack: local.games[key].activePack || remote.games[key].activePack || 'default',
       completedLevels: [...new Set([
         ...local.games[key].completedLevels,
         ...remote.games[key].completedLevels,
@@ -189,6 +201,9 @@ function mergePlayers(localPlayer, remotePlayer, email) {
     totalXP: Math.max(local.totalXP, remote.totalXP),
     totalPoints: Math.max(local.totalPoints, remote.totalPoints),
     coins: Math.max(local.coins, remote.coins),
+    unlockedPacks: [...new Set([...(local.unlockedPacks || []), ...(remote.unlockedPacks || [])])],
+    notificationsEnabled: Boolean(local.notificationsEnabled || remote.notificationsEnabled),
+    pushSubscription: local.pushSubscription || remote.pushSubscription || null,
     gamesPlayed: Math.max(local.gamesPlayed, remote.gamesPlayed),
     dailyChallengesCompleted: Math.max(local.dailyChallengesCompleted, remote.dailyChallengesCompleted),
     eventMissionsCompleted: Math.max(local.eventMissionsCompleted, remote.eventMissionsCompleted),

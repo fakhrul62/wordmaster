@@ -6,6 +6,7 @@ import Toast from './components/Toast'
 import UserSetup from './components/UserSetup'
 import { usePlayerData } from './hooks/usePlayerData'
 import { readSoundPreference, writeSoundPreference } from './utils/audio'
+import { decodeChallengeURL } from './utils/challenge'
 import { readHapticsPreference, writeHapticsPreference } from './utils/haptics'
 import { getGameTrack } from './utils/progression'
 
@@ -50,13 +51,14 @@ function makeRoute(screen, gameParams = null, routeIndex = 0) {
 function App() {
   const [savedRoute] = useState(readSavedRoute)
   const routeIndexRef = useRef(window.history.state?.routeIndex || 0)
+  const challengeHandledRef = useRef(false)
   const [screen, setScreen] = useState(savedRoute.screen)
   const [gameParams, setGameParams] = useState(savedRoute.gameParams)
   const [toast, setToast] = useState(null)
   const [themeSettings, setThemeSettings] = useState(readThemeSettings)
   const {
     player, selectPlayer, saveProgress, selectGameMode, selectDifficulty, selectTimerMode, selectWordPack,
-    spendCoins, connectAccount, switchPlayer, getLeaderboard,
+    spendCoins, unlockWordPack, setNotificationsEnabled, connectAccount, switchPlayer, getLeaderboard,
     syncStatus, syncError, storageWarning,
   } = usePlayerData()
 
@@ -124,6 +126,15 @@ function App() {
   }, [player, screen])
 
   useEffect(() => {
+    if (!player || challengeHandledRef.current) return
+    const challenge = decodeChallengeURL()
+    if (!challenge) return
+    challengeHandledRef.current = true
+    navigate('game', { ...routeForGame(challenge.gameKey), challengeSeed: challenge.seed }, { replace: true })
+    showToast('Challenge from a friend — same puzzle!', 'info')
+  }, [player])
+
+  useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = themeSettings.mode
     root.dataset.color = themeSettings.color
@@ -169,6 +180,8 @@ function App() {
         <HomeScreen
           player={player}
           getLeaderboard={getLeaderboard}
+          onUnlockWordPack={unlockWordPack}
+          showToast={showToast}
           onPlayGame={(gameKey) => {
             navigate('game', routeForGame(gameKey))
           }}
@@ -184,6 +197,7 @@ function App() {
           settings={themeSettings}
           onChange={setThemeSettings}
           onConnectAccount={connectAccount}
+          onNotificationsChange={setNotificationsEnabled}
           syncStatus={syncStatus}
           syncError={syncError}
           onBack={() => goBack(player ? 'home' : 'setup')}
@@ -194,6 +208,7 @@ function App() {
           gameKey={gameParams.gameKey}
           level={gameParams.level}
           mode={gameParams.mode}
+          challengeSeed={gameParams.challengeSeed}
           player={player}
           settings={themeSettings}
           gameProgress={player.games[gameParams.gameKey]}

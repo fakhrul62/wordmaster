@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import LevelBadge from './LevelBadge'
+import WordPackStore from './WordPackStore'
 import { GAME_CATALOG } from '../data/gameCatalog'
 import {
   ACHIEVEMENTS,
@@ -44,8 +46,40 @@ function ProgressBar({ value, max, label }) {
   )
 }
 
-function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
-  const leaderboard = getLeaderboard()
+function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard, onUnlockWordPack, showToast }) {
+  const [leaderboardScope, setLeaderboardScope] = useState('global')
+  const [packStoreOpen, setPackStoreOpen] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [leaderboard, setLeaderboard] = useState(() => ({
+    entries: [],
+    friends: [],
+    playerRank: '-',
+    totalPlayers: '-',
+  }))
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.resolve(getLeaderboard(leaderboardScope)).then((nextLeaderboard) => {
+      if (!cancelled) setLeaderboard(nextLeaderboard)
+    })
+    return () => { cancelled = true }
+  }, [getLeaderboard, leaderboardScope])
+
+  useEffect(() => {
+    function onBeforeInstallPrompt(event) {
+      const dismissedUntil = Number(localStorage.getItem('wordmaster_install_dismissed_until') || 0)
+      if (dismissedUntil > Date.now()) return
+      event.preventDefault()
+      setInstallPrompt(event)
+    }
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+  }, [])
+
+  function dismissInstallPrompt() {
+    localStorage.setItem('wordmaster_install_dismissed_until', String(Date.now() + 7 * 24 * 60 * 60 * 1000))
+    setInstallPrompt(null)
+  }
   const playerLevel = getPlayerLevel(player.totalXP)
   const eventProgress = getEventProgress(player)
   const milestones = getUpcomingMilestones(player)
@@ -85,6 +119,8 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
           <StatCard label="Points" value={player.totalPoints} detail="Leaderboard score" />
           <StatCard label="Streak" value={`${player.streak.count}d`} detail={`Best ${player.streak.best}d`} />
         </section>
+
+        <button className="btn-secondary home-wide-action" onClick={() => setPackStoreOpen(true)}>WORD PACKS 📦</button>
 
         <section className="engagement-grid">
           <article className="engagement-panel">
@@ -232,6 +268,20 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
             <h2>Leaderboard</h2>
             <span>Your position #{leaderboard.playerRank} of {leaderboard.totalPlayers}</span>
           </div>
+          <div className="leaderboard-tabs segmented-control">
+            <button
+              className={leaderboardScope === 'global' ? 'selected' : ''}
+              onClick={() => setLeaderboardScope('global')}
+            >
+              Global
+            </button>
+            <button
+              className={leaderboardScope === 'friends' ? 'selected' : ''}
+              onClick={() => setLeaderboardScope('friends')}
+            >
+              Local
+            </button>
+          </div>
           {leaderboard.entries.length ? (
             <div className="table-scroll">
               <table className="leaderboard">
@@ -259,6 +309,24 @@ function HomeScreen({ player, onPlayGame, onSwitchPlayer, getLeaderboard }) {
           </div>
         </section>
       </div>
+      {packStoreOpen && (
+        <WordPackStore
+          player={player}
+          onClose={() => setPackStoreOpen(false)}
+          onUnlock={(pack) => {
+            const unlocked = onUnlockWordPack?.(pack.id, pack.cost)
+            showToast?.(unlocked ? `${pack.name} unlocked.` : 'Not enough coins.', unlocked ? 'success' : 'error')
+          }}
+        />
+      )}
+      {installPrompt && (
+        <div className="install-banner">
+          <button className="btn-secondary" onClick={() => { installPrompt.prompt(); setInstallPrompt(null) }}>
+            INSTALL WORDMASTER FOR OFFLINE PLAY
+          </button>
+          <button className="home-icon-button" onClick={dismissInstallPrompt} aria-label="Dismiss install prompt">×</button>
+        </div>
+      )}
     </main>
   )
 }

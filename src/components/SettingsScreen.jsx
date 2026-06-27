@@ -15,7 +15,23 @@ const COLOR_OPTIONS = [
   { key: 'gold', label: 'Gold' },
 ]
 
-function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStatus, syncError, onBack }) {
+function urlBase64ToUint8Array(value) {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4)
+  const base64 = `${value}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
+  const raw = window.atob(base64)
+  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)))
+}
+
+function SettingsScreen({
+  player,
+  settings,
+  onChange,
+  onConnectAccount,
+  onNotificationsChange,
+  syncStatus,
+  syncError,
+  onBack,
+}) {
   const [email, setEmail] = useState(player?.accountEmail || '')
   const [accountError, setAccountError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -45,6 +61,32 @@ function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStat
     } finally {
       setSaving(false)
     }
+  }
+
+  async function setNotifications(enabled) {
+    if (!enabled) {
+      onNotificationsChange?.(false, null)
+      return
+    }
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      setAccountError('Notifications are not supported in this browser.')
+      return
+    }
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') {
+      onNotificationsChange?.(false, null)
+      return
+    }
+    const registration = await navigator.serviceWorker.ready
+    const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+    let subscription = null
+    if (publicKey && registration.pushManager) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      }).catch(() => null)
+    }
+    onNotificationsChange?.(true, subscription ? subscription.toJSON() : null)
   }
 
   return (
@@ -123,6 +165,21 @@ function SettingsScreen({ player, settings, onChange, onConnectAccount, syncStat
                   key={enabled ? 'haptics-on' : 'haptics-off'}
                   onClick={() => setHaptics(enabled)}
                   aria-pressed={settings.hapticsEnabled === enabled}
+                >
+                  {enabled ? 'ON' : 'OFF'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="settings-group">
+            <h3>Notifications</h3>
+            <div className="segmented-control">
+              {[true, false].map((enabled) => (
+                <button
+                  className={Boolean(player?.notificationsEnabled) === enabled ? 'selected' : ''}
+                  key={enabled ? 'notifications-on' : 'notifications-off'}
+                  onClick={() => setNotifications(enabled)}
+                  aria-pressed={Boolean(player?.notificationsEnabled) === enabled}
                 >
                   {enabled ? 'ON' : 'OFF'}
                 </button>
